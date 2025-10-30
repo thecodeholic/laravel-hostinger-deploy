@@ -155,12 +155,27 @@ class SetupAutomatedDeployCommand extends Command
             if (!$token) {
                 $this->error('❌ GitHub API token is required.');
                 $this->line('');
-                $this->warn('💡 Please provide your GitHub API token:');
-                $this->line('   1. Set GITHUB_API_TOKEN in your .env file, or');
-                $this->line('   2. Use --token=YOUR_TOKEN option');
+                $this->warn('💡 How to provide your GitHub API token:');
+                $this->line('   Option 1: Set GITHUB_API_TOKEN in your .env file');
+                $this->line('   Option 2: Use --token=YOUR_TOKEN option when running this command');
                 $this->line('');
-                $this->info('   Create a token at: https://github.com/settings/tokens');
-                $this->info('   Required scopes: repo, workflow');
+                $this->info('🔑 To create a GitHub Personal Access Token:');
+                $this->line('   1. Go to: https://github.com/settings/personal-access-tokens');
+                $this->line('   2. Click "Generate new token" → "Generate new token (classic)"');
+                $this->line('   3. Give your token a descriptive name (e.g., "Hostinger Deploy")');
+                $this->line('   4. Set expiration (or no expiration)');
+                $this->line('   5. Select the following permissions:');
+                $this->line('');
+                $this->info('   📋 Required Permissions:');
+                $this->info('      ✓ Contents → Read and write');
+                $this->info('        (Allows creating/updating files, commits, and branches)');
+                $this->info('      ✓ Workflows → Read and write');
+                $this->info('        (Allows creating/updating GitHub Actions workflows)');
+                $this->info('      ✓ Metadata → Read-only');
+                $this->info('        (Automatically selected, required for API access)');
+                $this->line('');
+                $this->warn('   6. Click "Generate token" and copy the token immediately');
+                $this->warn('      ⚠️  You won\'t be able to see it again!');
                 return false;
             }
 

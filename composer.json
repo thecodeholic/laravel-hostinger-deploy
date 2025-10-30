@@ -2,6 +2,7 @@
     "name": "thecodeholic/laravel-hostinger-deploy",
     "description": "Laravel package for automated Hostinger deployment with GitHub Actions support",
     "type": "library",
+    "version": "1.0.0",
     "license": "MIT",
     "keywords": [
         "laravel",
