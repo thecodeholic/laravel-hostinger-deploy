@@ -1,0 +1,51 @@
+name: Hostinger Deploy
+
+on:
+  push:
+    branches: [ {{BRANCH}} ]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '{{PHP_VERSION}}'
+
+      - name: Create .env
+        run: cp .env.example .env
+
+      - name: Install composer Dependencies
+        run: composer install -q --no-ansi --no-interaction --no-scripts --no-progress --prefer-dist
+
+      - name: Set Application Encryption Key
+        run: php artisan key:generate --ansi
+
+      - name: Create Storage Link
+        run: php artisan storage:link
+
+      - name: Run Migrations
+        run: php artisan migrate --force
+
+      - name: Deploy to Hostinger Server
+        if: ${{ success() }}
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USERNAME }}
+          port: ${{ secrets.SSH_PORT }}
+          key: ${{ secrets.SSH_KEY }}
+          script: |
+            cd domains/${{ vars.WEBSITE_FOLDER }}
+            git checkout {{BRANCH}}
+            git pull
+            composer install --no-dev --optimize-autoloader
+            php artisan migrate --force
+            php artisan config:cache
+            php artisan route:cache
+            php artisan view:cache
