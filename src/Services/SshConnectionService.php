@@ -1,6 +1,6 @@
 <?php
 
-namespace Zura\HostingerDeploy\Services;
+namespace TheCodeholic\LaravelHostingerDeploy\Services;
 
 use Illuminate\Support\Facades\Process;
 use Illuminate\Process\Exceptions\ProcessFailedException;

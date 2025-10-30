@@ -1,10 +1,10 @@
 <?php
 
-namespace Zura\HostingerDeploy\Commands;
+namespace TheCodeholic\LaravelHostingerDeploy\Commands;
 
 use Illuminate\Console\Command;
-use Zura\HostingerDeploy\Services\SshConnectionService;
-use Zura\HostingerDeploy\Services\GitHubActionsService;
+use TheCodeholic\LaravelHostingerDeploy\Services\SshConnectionService;
+use TheCodeholic\LaravelHostingerDeploy\Services\GitHubActionsService;
 
 class AutoDeployCommand extends Command
 {

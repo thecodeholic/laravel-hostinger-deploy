@@ -1,10 +1,10 @@
 <?php
 
-namespace Zura\HostingerDeploy\Commands;
+namespace TheCodeholic\LaravelHostingerDeploy\Commands;
 
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\File;
-use Zura\HostingerDeploy\Services\GitHubActionsService;
+use TheCodeholic\LaravelHostingerDeploy\Services\GitHubActionsService;
 
 class PublishWorkflowCommand extends Command
 {

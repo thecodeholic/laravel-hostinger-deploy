@@ -1,6 +1,6 @@
 <?php
 
-namespace Zura\HostingerDeploy\Commands;
+namespace TheCodeholic\LaravelHostingerDeploy\Commands;
 
 use Illuminate\Console\Command;
 

@@ -1,5 +1,5 @@
 {
-    "name": "zura/laravel-hostinger-deploy",
+    "name": "thecodeholic/laravel-hostinger-deploy",
     "description": "Laravel package for automated Hostinger deployment with GitHub Actions support",
     "type": "library",
     "license": "MIT",
@@ -12,8 +12,8 @@
     ],
     "authors": [
         {
-            "name": "Zura",
-            "email": "zura@example.com"
+            "name": "Zura Sekhniashvili",
+            "email": "zura@thecodeholic.com"
         }
     ],
     "require": {
@@ -29,18 +29,18 @@
     },
     "autoload": {
         "psr-4": {
-            "Zura\\HostingerDeploy\\": "src/"
+            "TheCodeholic\\LaravelHostingerDeploy\\": "src/"
         }
     },
     "autoload-dev": {
         "psr-4": {
-            "Zura\\HostingerDeploy\\Tests\\": "tests/"
+            "TheCodeholic\\LaravelHostingerDeploy\\Tests\\": "tests/"
         }
     },
     "extra": {
         "laravel": {
             "providers": [
-                "Zura\\HostingerDeploy\\HostingerDeployServiceProvider"
+                "TheCodeholic\\LaravelHostingerDeploy\\HostingerDeployServiceProvider"
             ]
         }
     },

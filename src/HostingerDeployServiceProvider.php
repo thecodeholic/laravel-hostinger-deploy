@@ -1,14 +1,14 @@
 <?php
 
-namespace Zura\HostingerDeploy;
+namespace TheCodeholic\LaravelHostingerDeploy;
 
 use Illuminate\Support\ServiceProvider;
-use Zura\HostingerDeploy\Commands\DeploySharedCommand;
-use Zura\HostingerDeploy\Commands\PublishWorkflowCommand;
-use Zura\HostingerDeploy\Commands\AutoDeployCommand;
-use Zura\HostingerDeploy\Commands\SetupEnvCommand;
-use Zura\HostingerDeploy\Commands\SetupAutomatedDeployCommand;
-use Zura\HostingerDeploy\Commands\DeployAndSetupAutomatedCommand;
+use TheCodeholic\LaravelHostingerDeploy\Commands\DeploySharedCommand;
+use TheCodeholic\LaravelHostingerDeploy\Commands\PublishWorkflowCommand;
+use TheCodeholic\LaravelHostingerDeploy\Commands\AutoDeployCommand;
+use TheCodeholic\LaravelHostingerDeploy\Commands\SetupEnvCommand;
+use TheCodeholic\LaravelHostingerDeploy\Commands\SetupAutomatedDeployCommand;
+use TheCodeholic\LaravelHostingerDeploy\Commands\DeployAndSetupAutomatedCommand;
 
 class HostingerDeployServiceProvider extends ServiceProvider
 {
