@@ -44,7 +44,22 @@ This will create `config/hostinger-deploy.php` with customizable options.
 
 ## Usage
 
-### 1. Deploy to Hostinger
+### 1. Setup Environment Variables
+
+Quickly add Hostinger environment variables to your `.env` file:
+
+```bash
+php artisan hostinger:setup-env
+```
+
+**Options:**
+- `--force`: Overwrite existing values
+- `--host=`: SSH host address
+- `--username=`: SSH username
+- `--port=`: SSH port
+- `--site-dir=`: Website folder name
+
+### 2. Deploy to Hostinger
 
 Deploy your Laravel application to Hostinger shared hosting:
 
@@ -56,7 +71,7 @@ php artisan hostinger:deploy-shared
 - `--fresh`: Delete existing files and clone fresh repository
 - `--site-dir=`: Override site directory from config
 
-### 2. Publish GitHub Actions Workflow
+### 3. Publish GitHub Actions Workflow
 
 Create a GitHub Actions workflow file for automated deployments:
 
@@ -68,7 +83,7 @@ php artisan hostinger:publish-workflow
 - `--branch=`: Override default branch (default: auto-detect)
 - `--php-version=`: Override PHP version (default: 8.3)
 
-### 3. Setup Automated Deployment
+### 4. Setup Automated Deployment
 
 Configure SSH keys and display GitHub secrets for automated deployment:
 
@@ -181,6 +196,31 @@ The generated GitHub Actions workflow will:
 - SSH keys are generated on the server and should be kept secure
 - Private keys are displayed for GitHub setup - copy them carefully
 - The package uses SSH key authentication for secure deployments
+
+## Example Workflow
+
+Here's a typical workflow:
+
+```bash
+# 1. Setup environment variables
+php artisan hostinger:setup-env
+
+# 2. Deploy manually first to test
+php artisan hostinger:deploy-shared
+
+# 3. Setup automated deployment
+php artisan hostinger:auto-deploy
+# (Copy the displayed secrets to GitHub)
+
+# 4. Publish workflow
+php artisan hostinger:publish-workflow
+
+# 5. Commit and push
+git add .
+git commit -m "Setup Hostinger deployment"
+git push
+# (This will trigger the GitHub Actions workflow)
+```
 
 ## License
 

@@ -128,6 +128,7 @@ class SshConnectionService
 
     /**
      * Build the SSH command string.
+     * Uses bash -c with proper escaping for reliable command execution.
      */
     protected function buildSshCommand(string $command): string
     {
@@ -138,9 +139,63 @@ class SshConnectionService
             '-o UserKnownHostsFile=/dev/null',
         ];
 
-        $sshCommand = 'ssh ' . implode(' ', $sshOptions) . ' ' . $this->username . '@' . $this->host . ' "' . addslashes($command) . '"';
+        // Use proper escaping for SSH command execution
+        // Escape the command properly for the shell
+        $escapedCommand = escapeshellarg($command);
+        $sshCommand = 'ssh ' . implode(' ', $sshOptions) . ' ' . $this->username . '@' . $this->host . ' ' . $escapedCommand;
         
         return $sshCommand;
+    }
+
+    /**
+     * Check if a directory exists.
+     */
+    public function directoryExists(string $path): bool
+    {
+        try {
+            // Path is escaped by buildSshCommand, so use single quotes inside
+            $result = $this->execute("test -d '{$path}' && echo 'exists' || echo 'not_exists'");
+            return trim($result) === 'exists';
+        } catch (\Exception $e) {
+            return false;
+        }
+    }
+
+    /**
+     * Check if a file exists.
+     */
+    public function fileExists(string $path): bool
+    {
+        try {
+            // Path is escaped by buildSshCommand, so use single quotes inside
+            $result = $this->execute("test -f '{$path}' && echo 'exists' || echo 'not_exists'");
+            return trim($result) === 'exists';
+        } catch (\Exception $e) {
+            return false;
+        }
+    }
+
+    /**
+     * Check if a directory is empty.
+     */
+    public function directoryIsEmpty(string $path): bool
+    {
+        try {
+            // Path is escaped by buildSshCommand, so use single quotes inside
+            $result = $this->execute("test -d '{$path}' && [ -z \"\$(ls -A '{$path}' 2>/dev/null)\" ] && echo 'empty' || echo 'not_empty'");
+            return trim($result) === 'empty';
+        } catch (\Exception $e) {
+            return false;
+        }
+    }
+
+    /**
+     * Execute a command in a specific directory.
+     */
+    public function executeInDirectory(string $path, string $command): string
+    {
+        $fullCommand = "cd " . escapeshellarg($path) . " && " . $command;
+        return $this->execute($fullCommand);
     }
 
     /**

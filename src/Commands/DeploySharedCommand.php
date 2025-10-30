@@ -108,7 +108,7 @@ class DeploySharedCommand extends Command
 
         $this->info("✅ Detected Git repository: {$repoUrl}");
         
-        if (!$this->confirm('Use this repository for deployment?')) {
+        if (!$this->confirm('Use this repository for deployment?', 'yes')) {
             $repoUrl = $this->ask('Enter your Git repository URL');
         }
 
@@ -140,8 +140,11 @@ class DeploySharedCommand extends Command
             // Setup SSH keys if needed
             $this->setupSshKeys();
 
+            // Check folder status and get deployment choice
+            $cloneChoice = $this->getDeploymentChoice($siteDir, $isFresh);
+
             // Prepare deployment commands
-            $commands = $this->buildDeploymentCommands($repoUrl, $siteDir, $isFresh);
+            $commands = $this->buildDeploymentCommands($repoUrl, $siteDir, $cloneChoice);
 
             // Execute deployment
             $this->info('📦 Deploying application...');
@@ -181,26 +184,147 @@ class DeploySharedCommand extends Command
     }
 
     /**
+     * Check folder status and get deployment choice from user.
+     */
+    protected function getDeploymentChoice(string $siteDir, bool $forceFresh): string
+    {
+        if ($forceFresh) {
+            return 'delete_and_clone_direct';
+        }
+
+        $this->info('🔍 Checking website folder...');
+
+        // Check if folder is empty
+        $folderStatus = $this->checkFolderStatus($siteDir);
+
+        if ($folderStatus === 'empty') {
+            $this->info('✅ Empty folder - ready to deploy');
+            return 'clone_direct';
+        }
+
+        // Check if it's a Laravel project
+        $isLaravel = $this->isLaravelProject($siteDir);
+
+        $fullPath = $this->getAbsoluteSitePath($siteDir);
+
+        if ($isLaravel) {
+            $this->info("✅ Found existing Laravel project in: {$fullPath}");
+            $this->line('');
+            $this->line('1. Replace with fresh deployment');
+            $this->line('2. Keep existing and continue');
+            $this->line('');
+
+            $choice = $this->ask('Choose [1/2]', '2');
+
+            if ($choice === '1') {
+                $this->info('🔄 Will replace existing project');
+                return 'delete_and_clone_direct';
+            } else {
+                $this->info('⏭️  Keeping existing project');
+                return 'skip';
+            }
+        } else {
+            $this->error("❌ Non-Laravel project detected in: {$fullPath}");
+            $this->line('');
+            $this->line('1. Replace with Laravel project');
+            $this->line('2. Cancel deployment');
+            $this->line('');
+
+            $choice = $this->ask('Choose [1/2]', '2');
+
+            if ($choice === '1') {
+                $this->info('🔄 Will replace with Laravel project');
+                return 'delete_and_clone_direct';
+            } else {
+                $this->info('❌ Deployment cancelled');
+                throw new \Exception('Deployment cancelled by user');
+            }
+        }
+    }
+
+    /**
+     * Check if the folder is empty or not.
+     */
+    protected function checkFolderStatus(string $siteDir): string
+    {
+        $absolutePath = $this->getAbsoluteSitePath($siteDir);
+        
+        // First check if directory exists
+        if (!$this->ssh->directoryExists($absolutePath)) {
+            return 'empty';
+        }
+        
+        // Then check if it's empty
+        if ($this->ssh->directoryIsEmpty($absolutePath)) {
+            return 'empty';
+        }
+        
+        return 'not_empty';
+    }
+
+    /**
+     * Check if the folder contains a Laravel project.
+     */
+    protected function isLaravelProject(string $siteDir): bool
+    {
+        $absolutePath = $this->getAbsoluteSitePath($siteDir);
+        
+        // Check if directory exists
+        if (!$this->ssh->directoryExists($absolutePath)) {
+            return false;
+        }
+        
+        // Check for Laravel-specific files
+        $artisanPath = $absolutePath . '/artisan';
+        $composerPath = $absolutePath . '/composer.json';
+        
+        if (!$this->ssh->fileExists($artisanPath) || !$this->ssh->fileExists($composerPath)) {
+            return false;
+        }
+        
+        // Check if composer.json contains laravel/framework
+        try {
+            // Path is escaped by buildSshCommand, so use single quotes inside
+            $grepCommand = "grep -q 'laravel/framework' '{$composerPath}' 2>/dev/null && echo 'yes' || echo 'no'";
+            $result = trim($this->ssh->execute($grepCommand));
+            return trim($result) === 'yes';
+        } catch (\Exception $e) {
+            return false;
+        }
+    }
+
+    /**
      * Build deployment commands.
      */
-    protected function buildDeploymentCommands(string $repoUrl, string $siteDir, bool $isFresh): array
+    protected function buildDeploymentCommands(string $repoUrl, string $siteDir, string $cloneChoice): array
     {
         $commands = [];
+        $absolutePath = $this->getAbsoluteSitePath($siteDir);
 
-        // Navigate to site directory
-        $commands[] = "mkdir -p domains/{$siteDir}";
-        $commands[] = "cd domains/{$siteDir}";
+        // Create site directory
+        $commands[] = "mkdir -p {$absolutePath}";
+        $commands[] = "cd {$absolutePath}";
 
         // Remove public_html if exists
         $commands[] = "rm -rf public_html";
 
-        if ($isFresh) {
-            // Fresh deployment - delete everything and clone
-            $commands[] = "rm -rf * .[^.]* 2>/dev/null || true";
-            $commands[] = "git clone {$repoUrl} .";
-        } else {
-            // Check if repository exists
-            $commands[] = "if [ -d .git ]; then git pull; else git clone {$repoUrl} .; fi";
+        switch ($cloneChoice) {
+            case 'clone_direct':
+                // Fresh deployment - clone directly
+                $commands[] = "git clone {$repoUrl} .";
+                break;
+            case 'delete_and_clone_direct':
+                // Replace existing - delete everything and clone
+                $commands[] = "rm -rf * .[^.]* 2>/dev/null || true";
+                $commands[] = "git clone {$repoUrl} .";
+                break;
+            case 'skip':
+                // Keep existing - just update dependencies
+                break;
+            default:
+                // Default: check if repository exists
+                $commands[] = "if [ -d .git ]; then git pull; else git clone {$repoUrl} .; fi";
+                break;
         }
 
         // Install dependencies
@@ -233,5 +357,14 @@ class DeploySharedCommand extends Command
     protected function getSiteDir(): string
     {
         return $this->option('site-dir') ?: config('hostinger-deploy.deployment.site_dir');
+    }
+
+    /**
+     * Get absolute path for the site directory.
+     */
+    protected function getAbsoluteSitePath(string $siteDir): string
+    {
+        $username = config('hostinger-deploy.ssh.username');
+        return "/home/{$username}/domains/{$siteDir}";
     }
 }
