@@ -6,7 +6,6 @@ use Illuminate\Support\ServiceProvider;
 use TheCodeholic\LaravelHostingerDeploy\Commands\DeploySharedCommand;
 use TheCodeholic\LaravelHostingerDeploy\Commands\PublishWorkflowCommand;
 use TheCodeholic\LaravelHostingerDeploy\Commands\AutoDeployCommand;
-use TheCodeholic\LaravelHostingerDeploy\Commands\SetupEnvCommand;
 use TheCodeholic\LaravelHostingerDeploy\Commands\SetupAutomatedDeployCommand;
 use TheCodeholic\LaravelHostingerDeploy\Commands\DeployAndSetupAutomatedCommand;
 
@@ -32,7 +31,6 @@ class HostingerDeployServiceProvider extends ServiceProvider
                 DeploySharedCommand::class,
                 PublishWorkflowCommand::class,
                 AutoDeployCommand::class,
-                SetupEnvCommand::class,
                 SetupAutomatedDeployCommand::class,
                 DeployAndSetupAutomatedCommand::class,
             ]);
