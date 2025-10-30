@@ -148,11 +148,31 @@ class DeploySharedCommand extends Command
 
             // Execute deployment
             $this->info('📦 Deploying application...');
-            $this->ssh->executeMultiple($commands);
-
-            return true;
+            try {
+                $this->ssh->executeMultiple($commands);
+                return true;
+            } catch (\Exception $e) {
+                // Check if this is a git clone authentication error
+                if ($this->isGitAuthenticationError($e)) {
+                    return $this->handleGitAuthenticationError($repoUrl, $siteDir, $cloneChoice);
+                }
+                throw $e; // Re-throw if it's not an auth error
+            }
         } catch (\Exception $e) {
-            $this->error("Deployment error: " . $e->getMessage());
+            // Check if this is a git authentication error that wasn't caught earlier
+            if ($this->isGitAuthenticationError($e)) {
+                return $this->handleGitAuthenticationError($repoUrl, $siteDir, 'clone_direct');
+            }
+            
+            // Show user-friendly error message instead of technical details
+            $this->error("❌ Deployment failed.");
+            $this->line('');
+            $this->warn('💡 This might be due to:');
+            $this->line('   1. Server connection issues');
+            $this->line('   2. Repository access problems');
+            $this->line('   3. Missing dependencies on the server');
+            $this->line('');
+            $this->info('🔧 Please check your server configuration and try again.');
             return false;
         }
     }
@@ -201,6 +221,8 @@ class DeploySharedCommand extends Command
             $this->info('✅ Empty folder - ready to deploy');
             return 'clone_direct';
         }
+
+        $this->warn('⚠️  Folder not empty - checking contents...');
 
         // Check if it's a Laravel project
         $isLaravel = $this->isLaravelProject($siteDir);
@@ -366,5 +388,157 @@ class DeploySharedCommand extends Command
     {
         $username = config('hostinger-deploy.ssh.username');
         return "/home/{$username}/domains/{$siteDir}";
+    }
+
+    /**
+     * Check if the exception is a git authentication error.
+     */
+    protected function isGitAuthenticationError(\Exception $e): bool
+    {
+        $errorMessage = $e->getMessage();
+        
+        // Check for common git authentication error messages
+        $authErrorPatterns = [
+            'Repository not found',
+            'Could not read from remote repository',
+            'Permission denied',
+            'Please make sure you have the correct access rights',
+            'Host key verification failed',
+            'Authentication failed',
+        ];
+
+        foreach ($authErrorPatterns as $pattern) {
+            if (stripos($errorMessage, $pattern) !== false) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Handle git authentication error by displaying public key and instructions.
+     */
+    protected function handleGitAuthenticationError(string $repoUrl, string $siteDir, string $cloneChoice): bool
+    {
+        $this->line('');
+        $this->warn('🔑 Git authentication failed! The deploy key is not set up correctly.');
+        $this->line('');
+
+        // Get public key from server
+        $publicKey = $this->ssh->getPublicKey();
+        
+        if (!$publicKey) {
+            $this->error('❌ Could not retrieve public key from server. Generating new key...');
+            if ($this->ssh->generateSshKey()) {
+                $publicKey = $this->ssh->getPublicKey();
+            }
+        }
+
+        if ($publicKey) {
+            // Get repository information
+            $repoInfo = $this->github->parseRepositoryUrl($repoUrl);
+            
+            $this->info('📋 Add this SSH public key to your GitHub repository:');
+            $this->line('');
+            
+            if ($repoInfo) {
+                $deployKeysUrl = $this->github->getDeployKeysUrl($repoInfo['owner'], $repoInfo['name']);
+                $this->line("   Go to: {$deployKeysUrl}");
+            } else {
+                $this->line("   Go to: Your repository → Settings → Deploy keys");
+            }
+            
+            $this->line('');
+            $this->warn('   Steps:');
+            $this->line('   1. Click "Add deploy key"');
+            $this->line('   2. Give it a title (e.g., "Hostinger Server")');
+            $this->line('   3. Paste the public key below');
+            $this->line('   4. ✅ Check "Allow write access" (optional, for deployments)');
+            $this->line('   5. Click "Add key"');
+            $this->line('');
+            $this->line('   ' . str_repeat('-', 60));
+            $this->line($publicKey);
+            $this->line('   ' . str_repeat('-', 60));
+            $this->line('');
+            
+            // Retry loop - keep asking until deployment succeeds or user gives up
+            $maxRetries = 3;
+            $attempt = 0;
+            
+            while ($attempt < $maxRetries) {
+                $this->ask('Press ENTER after you have added the deploy key to GitHub to continue...', '');
+                $this->info('🔄 Retrying deployment...');
+                
+                try {
+                    $commands = $this->buildDeploymentCommands($repoUrl, $siteDir, $cloneChoice);
+                    $this->ssh->executeMultiple($commands);
+                    
+                    // Success - let main handle method display success message
+                    return true;
+                } catch (\Exception $e) {
+                    $attempt++;
+                    
+                    // Check if it's still an authentication error
+                    if ($this->isGitAuthenticationError($e) && $attempt < $maxRetries) {
+                        $this->line('');
+                        $this->warn("⚠️  Authentication still failed (attempt {$attempt}/{$maxRetries})");
+                        $this->line('');
+                        $this->warn('💡 Please make sure:');
+                        $this->line('   1. You have copied the public key correctly');
+                        $this->line('   2. You have added it as a deploy key (not SSH key)');
+                        $this->line('   3. You have saved the deploy key');
+                        $this->line('');
+                        $this->info('📋 Here is your public key again:');
+                        $this->line('');
+                        $this->line('   ' . str_repeat('-', 60));
+                        $this->line($publicKey);
+                        $this->line('   ' . str_repeat('-', 60));
+                        $this->line('');
+                        continue;
+                    } else {
+                        // Not an auth error or max retries reached
+                        return $this->handleDeploymentFailure($e, $repoUrl, $attempt >= $maxRetries);
+                    }
+                }
+            }
+            
+            return false;
+        } else {
+            $this->error('❌ Could not retrieve or generate SSH public key.');
+            return false;
+        }
+    }
+
+    /**
+     * Handle deployment failure with user-friendly error messages.
+     */
+    protected function handleDeploymentFailure(\Exception $e, string $repoUrl, bool $maxRetriesReached): bool
+    {
+        $this->line('');
+        
+        if ($maxRetriesReached) {
+            $this->error('❌ Maximum retry attempts reached.');
+            $this->line('');
+            $this->warn('💡 Please check:');
+            $this->line('   1. The deploy key has been added correctly to GitHub');
+            $this->line('   2. The repository URL is correct: ' . $repoUrl);
+            $this->line('   3. You have access to the repository');
+            $this->line('   4. The deploy key has write access (if needed)');
+            $this->line('');
+            $this->info('🔧 You can try running the command again after fixing the issue.');
+        } else {
+            // Not an authentication error - show general deployment failure
+            $this->error('❌ Deployment failed.');
+            $this->line('');
+            $this->warn('💡 This might be due to:');
+            $this->line('   1. Server connection issues');
+            $this->line('   2. Repository access problems');
+            $this->line('   3. Missing dependencies on the server');
+            $this->line('');
+            $this->info('🔧 Please check your server configuration and try again.');
+        }
+        
+        return false;
     }
 }
