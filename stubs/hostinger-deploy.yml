@@ -41,7 +41,7 @@ jobs:
           port: ${{ secrets.SSH_PORT }}
           key: ${{ secrets.SSH_KEY }}
           script: |
-            cd domains/${{ vars.WEBSITE_FOLDER }}
+            cd domains/${{ secrets.WEBSITE_FOLDER }}
             git checkout {{BRANCH}}
             git pull
             composer install --no-dev --optimize-autoloader

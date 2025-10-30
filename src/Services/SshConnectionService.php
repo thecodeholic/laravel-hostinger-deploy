@@ -101,14 +101,50 @@ class SshConnectionService
     }
 
     /**
-     * Add a public key to authorized_keys.
+     * Add a public key to authorized_keys if it doesn't already exist.
      */
     public function addToAuthorizedKeys(string $publicKey): bool
     {
         try {
+            // Check if the key already exists in authorized_keys
+            $keyExists = $this->keyExistsInAuthorizedKeys($publicKey);
+            
+            if ($keyExists) {
+                // Key already exists, don't add it again
+                return true;
+            }
+
+            // Key doesn't exist, add it
             $this->execute("echo '{$publicKey}' >> ~/.ssh/authorized_keys");
             return true;
         } catch (\Exception $e) {
+            return false;
+        }
+    }
+
+    /**
+     * Check if a public key already exists in authorized_keys.
+     */
+    public function keyExistsInAuthorizedKeys(string $publicKey): bool
+    {
+        try {
+            // Extract the key part (without comment) for comparison
+            $keyParts = explode(' ', trim($publicKey));
+            if (count($keyParts) < 2) {
+                return false;
+            }
+            
+            $keyData = $keyParts[1]; // The actual key data (middle part)
+            
+            // Check if this key data exists in authorized_keys
+            // Use grep with escaped key data to avoid special character issues
+            $escapedKeyData = escapeshellarg($keyData);
+            $command = "grep -Fq {$escapedKeyData} ~/.ssh/authorized_keys 2>/dev/null && echo 'exists' || echo 'not_exists'";
+            $result = trim($this->execute($command));
+            
+            return $result === 'exists';
+        } catch (\Exception $e) {
+            // If we can't check, assume it doesn't exist
             return false;
         }
     }

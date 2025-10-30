@@ -47,6 +47,7 @@ return [
         'workflow_file' => '.github/workflows/hostinger-deploy.yml',
         'php_version' => '8.3',
         'default_branch' => 'main',
+        'api_token' => env('GITHUB_API_TOKEN'),
     ],
 
     /*

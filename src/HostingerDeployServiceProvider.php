@@ -7,6 +7,8 @@ use Zura\HostingerDeploy\Commands\DeploySharedCommand;
 use Zura\HostingerDeploy\Commands\PublishWorkflowCommand;
 use Zura\HostingerDeploy\Commands\AutoDeployCommand;
 use Zura\HostingerDeploy\Commands\SetupEnvCommand;
+use Zura\HostingerDeploy\Commands\SetupAutomatedDeployCommand;
+use Zura\HostingerDeploy\Commands\DeployAndSetupAutomatedCommand;
 
 class HostingerDeployServiceProvider extends ServiceProvider
 {
@@ -31,6 +33,8 @@ class HostingerDeployServiceProvider extends ServiceProvider
                 PublishWorkflowCommand::class,
                 AutoDeployCommand::class,
                 SetupEnvCommand::class,
+                SetupAutomatedDeployCommand::class,
+                DeployAndSetupAutomatedCommand::class,
             ]);
 
             $this->publishes([

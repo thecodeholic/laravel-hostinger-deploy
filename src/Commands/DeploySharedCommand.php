@@ -194,9 +194,7 @@ class DeploySharedCommand extends Command
                 $this->line($publicKey);
                 $this->line('');
                 
-                if (!$this->confirm('Press ENTER after adding the key to GitHub...')) {
-                    throw new \Exception('SSH key setup cancelled');
-                }
+                $this->ask('Press ENTER after adding the key to GitHub to continue...', '');
             }
         } else {
             $this->info('🔑 SSH keys already configured');
