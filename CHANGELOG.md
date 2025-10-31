@@ -5,6 +5,30 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] - 2025-01-XX
+
+### Added
+- Enhanced error handling with detailed error messages showing exit codes and command output
+- `--show-errors` flag for `hostinger:deploy` command to display verbose error information
+- Automatic Git host key verification: Automatically adds Git repository host (GitHub, GitLab, etc.) to `known_hosts` to prevent interactive prompts during first-time cloning
+- Support for all Git hosting providers: Extracts hostname from repository URL automatically (GitHub, GitLab, Bitbucket, etc.)
+
+### Improved
+- Error messages now include exit codes, error output (stderr), and regular output (stdout) from failed SSH commands
+- Deployment failures now provide actionable debugging information instead of generic error messages
+- Fixed first-time repository cloning issue where SSH would prompt for host key verification
+- Better error visibility: Errors with detailed information are automatically shown even without the `--show-errors` flag
+
+### Documentation
+- Added requirement documentation for PHP `exec()` function in README
+- Added SSH public key authentication setup recommendations and instructions
+- Moved environment variables section to the top of README for better visibility
+- Enhanced README with clearer setup instructions and security best practices
+
+### Fixed
+- Fixed deployment failure on first-time git clone due to host key verification prompt
+- Improved error reporting when deployment commands fail with non-zero exit codes
+
 ## [0.2.0] - 2025-10-31
 
 ### Added

@@ -7,7 +7,7 @@ Deploy your Laravel application to Hostinger shared hosting with automated GitHu
 Install the package via Composer:
 
 ```bash
-composer require thecodeholic/laravel-hostinger-deploy:^0.2 --dev
+composer require thecodeholic/laravel-hostinger-deploy:^0.3 --dev
 ```
 
 Or install the latest version:
@@ -77,6 +77,7 @@ php artisan hostinger:deploy
 - `--fresh` - Delete existing files and clone fresh repository
 - `--site-dir=` - Override site directory from config
 - `--token=` - GitHub Personal Access Token (optional, enables automatic deploy key management)
+- `--show-errors` - Display detailed error messages with exit codes and command output
 
 > **Note:** If `GITHUB_API_TOKEN` is provided (via `.env` or `--token` option), the command will automatically add deploy keys to your GitHub repository. Otherwise, you'll be prompted to add the deploy key manually.
 
