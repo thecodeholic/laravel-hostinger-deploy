@@ -41,13 +41,14 @@ GITHUB_API_TOKEN=your-github-token
 **What this command does:**
 1. Deploys your Laravel application to Hostinger
 2. Sets up SSH keys on the server
-3. Creates GitHub Actions workflow file
-4. Configures GitHub secrets and variables via API
+3. Automatically adds deploy key to GitHub repository via API
+4. Publishes GitHub Actions workflow file locally (`.github/workflows/hostinger-deploy.yml`)
+5. Configures GitHub secrets and variables via API
 
 **Command Options:**
 - `--fresh` - Delete existing files and clone fresh repository
 - `--site-dir=` - Override site directory from config
-- `--token=` - GitHub API token (overrides GITHUB_API_TOKEN from .env)
+- `--token=` - GitHub Personal Access Token (overrides GITHUB_API_TOKEN from .env)
 - `--branch=` - Branch to deploy (default: auto-detect)
 - `--php-version=` - PHP version for workflow (default: 8.3)
 
@@ -70,6 +71,9 @@ php artisan hostinger:deploy-shared
 **Command Options:**
 - `--fresh` - Delete existing files and clone fresh repository
 - `--site-dir=` - Override site directory from config
+- `--token=` - GitHub Personal Access Token (optional, enables automatic deploy key management)
+
+> **Note:** If `GITHUB_API_TOKEN` is provided (via `.env` or `--token` option), the command will automatically add deploy keys to your GitHub repository. Otherwise, you'll be prompted to add the deploy key manually.
 
 ---
 
@@ -113,7 +117,7 @@ php artisan hostinger:publish-workflow
 php artisan hostinger:setup-automated-deploy
 ```
 
-**What it does:** Creates GitHub Actions workflow and secrets automatically via GitHub API
+**What it does:** Publishes GitHub Actions workflow file locally and creates secrets automatically via GitHub API, and automatically adds deploy keys to your repository
 
 **Required Environment Variables:**
 - `HOSTINGER_SSH_HOST`
@@ -123,9 +127,16 @@ php artisan hostinger:setup-automated-deploy
 - `GITHUB_API_TOKEN`
 
 **Command Options:**
-- `--token=` - GitHub API token (overrides GITHUB_API_TOKEN from .env)
+- `--token=` - GitHub Personal Access Token (overrides GITHUB_API_TOKEN from .env)
 - `--branch=` - Branch to deploy (default: auto-detect)
 - `--php-version=` - PHP version for workflow (default: 8.3)
+
+**GitHub Personal Access Token Permissions:**
+Your GitHub Personal Access Token needs the following permissions:
+- **Administration** → Read and write (for managing deploy keys for the repository)
+- **Metadata** → Read-only (automatically selected, required for API access)
+
+**Note:** The workflow file is published locally to `.github/workflows/hostinger-deploy.yml`. You'll need to review, commit, and push it manually. The command only uses the API to create secrets and deploy keys.
 
 ## Environment Variables Summary
 
@@ -135,7 +146,7 @@ php artisan hostinger:setup-automated-deploy
 | `HOSTINGER_SSH_USERNAME` | All commands | Hostinger SSH username |
 | `HOSTINGER_SSH_PORT` | All commands | SSH port (default: 22) |
 | `HOSTINGER_SITE_DIR` | All commands | Website folder name |
-| `GITHUB_API_TOKEN` | Automated setup | GitHub personal access token (repo, workflow scopes) |
+| `GITHUB_API_TOKEN` | Automated setup | GitHub Personal Access Token (requires Administration permission for deploy keys) |
 
 ## Requirements
 

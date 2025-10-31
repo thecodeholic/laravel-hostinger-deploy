@@ -33,8 +33,6 @@ class PublishWorkflowCommand extends Command
      */
     public function handle(): int
     {
-        $this->info('📄 Publishing GitHub Actions workflow...');
-
         // Check if we're in a Git repository
         if (!$this->github->isGitRepository()) {
             $this->error('❌ Not in a Git repository. Please run this command from a Git repository.');
@@ -48,19 +46,29 @@ class PublishWorkflowCommand extends Command
             return self::FAILURE;
         }
 
-        $this->info("📦 Repository: {$repoInfo['owner']}/{$repoInfo['name']}");
-        $this->info("🌿 Branch: {$repoInfo['branch']}");
-
         // Get configuration
-        $branch = $this->option('branch') ?: $this->getBranch();
+        $branch = $this->option('branch') ?: $this->github->getCurrentBranch() ?: config('hostinger-deploy.github.default_branch', 'main');
         $phpVersion = $this->option('php-version') ?: config('hostinger-deploy.github.php_version', '8.3');
         $workflowFile = config('hostinger-deploy.github.workflow_file', '.github/workflows/hostinger-deploy.yml');
+
+        // Check if file already exists
+        if (File::exists($workflowFile)) {
+            $choice = $this->choice(
+                "Workflow file already exists at {$workflowFile}. What would you like to do?",
+                ['Overwrite', 'Skip'],
+                0
+            );
+
+            if ($choice === 'Skip') {
+                $this->info('⚠️  Skipping workflow file creation.');
+                return self::SUCCESS;
+            }
+        }
 
         // Create .github/workflows directory if it doesn't exist
         $workflowDir = dirname($workflowFile);
         if (!File::exists($workflowDir)) {
             File::makeDirectory($workflowDir, 0755, true);
-            $this->info("📁 Created directory: {$workflowDir}");
         }
 
         // Generate workflow content
@@ -68,33 +76,13 @@ class PublishWorkflowCommand extends Command
 
         // Write workflow file
         if (File::put($workflowFile, $workflowContent)) {
-            $this->info("✅ Workflow file created: {$workflowFile}");
+            $this->info("✅ Workflow file published: {$workflowFile}");
         } else {
             $this->error("❌ Failed to create workflow file: {$workflowFile}");
             return self::FAILURE;
         }
 
-        // Display next steps
-        $this->displayNextSteps($repoInfo);
-
         return self::SUCCESS;
-    }
-
-    /**
-     * Get the branch to use for the workflow.
-     */
-    protected function getBranch(): string
-    {
-        $currentBranch = $this->github->getCurrentBranch();
-        $defaultBranch = config('hostinger-deploy.github.default_branch', 'main');
-
-        if ($currentBranch && $currentBranch !== $defaultBranch) {
-            if ($this->confirm("Use current branch '{$currentBranch}' for the workflow? (default: {$defaultBranch})")) {
-                return $currentBranch;
-            }
-        }
-
-        return $defaultBranch;
     }
 
     /**
@@ -117,39 +105,4 @@ class PublishWorkflowCommand extends Command
         return $content;
     }
 
-    /**
-     * Display next steps for the user.
-     */
-    protected function displayNextSteps(array $repoInfo): void
-    {
-        $this->line('');
-        $this->info('🎉 GitHub Actions workflow published successfully!');
-        $this->line('');
-        $this->warn('📋 Next steps:');
-        $this->line('');
-        $this->line('1. Add the following secrets to your GitHub repository:');
-        $this->line('   Go to: ' . $repoInfo['secrets_url']);
-        $this->line('');
-        $this->line('   Required secrets:');
-        $this->line('   - SSH_HOST: Your Hostinger server IP address');
-        $this->line('   - SSH_USERNAME: Your Hostinger SSH username');
-        $this->line('   - SSH_PORT: Your Hostinger SSH port (usually 22)');
-        $this->line('   - SSH_KEY: Your private SSH key');
-        $this->line('');
-        $this->line('2. Add the following variable to your GitHub repository:');
-        $this->line('   Go to: ' . $repoInfo['variables_url']);
-        $this->line('');
-        $this->line('   Required variable:');
-        $this->line('   - WEBSITE_FOLDER: Your Hostinger website folder name');
-        $this->line('');
-        $this->line('3. Run the auto-deploy command to get your SSH keys:');
-        $this->line('   php artisan hostinger:auto-deploy');
-        $this->line('');
-        $this->line('4. Push changes to trigger the workflow:');
-        $this->line('   git add .');
-        $this->line('   git commit -m "Add Hostinger deployment workflow"');
-        $this->line('   git push');
-        $this->line('');
-        $this->info('🚀 Your repository will now automatically deploy on push!');
-    }
 }

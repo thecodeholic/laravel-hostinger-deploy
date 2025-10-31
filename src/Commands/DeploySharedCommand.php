@@ -5,6 +5,7 @@ namespace TheCodeholic\LaravelHostingerDeploy\Commands;
 use Illuminate\Console\Command;
 use TheCodeholic\LaravelHostingerDeploy\Services\SshConnectionService;
 use TheCodeholic\LaravelHostingerDeploy\Services\GitHubActionsService;
+use TheCodeholic\LaravelHostingerDeploy\Services\GitHubAPIService;
 
 class DeploySharedCommand extends Command
 {
@@ -13,7 +14,8 @@ class DeploySharedCommand extends Command
      */
     protected $signature = 'hostinger:deploy-shared 
                             {--fresh : Delete and clone fresh repository}
-                            {--site-dir= : Override site directory from config}';
+                            {--site-dir= : Override site directory from config}
+                            {--token= : GitHub Personal Access Token}';
 
     /**
      * The console command description.
@@ -22,6 +24,7 @@ class DeploySharedCommand extends Command
 
     protected SshConnectionService $ssh;
     protected GitHubActionsService $github;
+    protected ?GitHubAPIService $githubAPI = null;
 
     public function __construct()
     {
@@ -49,6 +52,9 @@ class DeploySharedCommand extends Command
         }
 
         $this->info("📦 Repository: {$repoUrl}");
+
+        // Initialize GitHub API (optional, for automatic deploy key management)
+        $this->initializeGitHubAPI($repoUrl);
 
         // Setup SSH connection
         $this->setupSshConnection();
@@ -178,26 +184,153 @@ class DeploySharedCommand extends Command
     }
 
     /**
-     * Setup SSH keys on server if needed.
+     * Initialize GitHub API service (optional).
+     */
+    protected function initializeGitHubAPI(?string $repoUrl = null): void
+    {
+        try {
+            $token = $this->option('token') ?: env('GITHUB_API_TOKEN');
+
+            if (!$token) {
+                $this->line('');
+                $this->warn('⚠️  GitHub Personal Access Token is not set.');
+                $this->line('');
+                
+                if (!$this->confirm('Do you want to proceed?', true)) {
+                    // User chose "no" - show instructions and halt
+                    $this->line('');
+                    $this->showGitHubTokenInstructions();
+                    $this->line('');
+                    $this->info('📝 Please add GITHUB_API_TOKEN to your .env file and rerun the script.');
+                    $this->line('');
+                    exit(0);
+                }
+                
+                // User chose "yes" - continue without token, deploy key will be shown manually
+                $this->warn('⚠️  Continuing without Personal Access Token. Deploy key will be displayed for manual addition.');
+                return;
+            }
+
+            $this->githubAPI = new GitHubAPIService($token);
+
+            // Test API connection
+            if (!$this->githubAPI->testConnection()) {
+                $this->warn('⚠️  GitHub API connection failed. Deploy key will need to be added manually.');
+                $this->githubAPI = null;
+                return;
+            }
+
+            $this->info('✅ GitHub API connection successful');
+        } catch (\Exception $e) {
+            // API is optional, continue without it
+            $this->warn('⚠️  GitHub API initialization failed: ' . $e->getMessage());
+            $this->warn('   Deploy key will need to be added manually.');
+            $this->githubAPI = null;
+        }
+    }
+
+    /**
+     * Show instructions for generating GitHub Personal Access Token.
+     */
+    protected function showGitHubTokenInstructions(): void
+    {
+        $this->info('🔑 To create a GitHub Personal Access Token:');
+        $this->line('');
+        $this->line('   1. Go to: https://github.com/settings/personal-access-tokens');
+        $this->line('   2. Click "Generate new token" → "Generate new token (classic)"');
+        $this->line('   3. Give your token a descriptive name (e.g., "Hostinger Deploy")');
+        $this->line('   4. Set expiration (or no expiration)');
+        $this->line('   5. Select the following permissions:');
+        $this->line('');
+        $this->info('   📋 Required Permissions:');
+        $this->info('      ✓ Administration → Read and write');
+        $this->info('        (Allows managing deploy keys for the repository)');
+        $this->info('      ✓ Secrets → Read and write');
+        $this->info('        (Allows creating/updating GitHub Actions secrets)');
+        $this->info('      ✓ Metadata → Read-only');
+        $this->info('        (Automatically selected, required for API access)');
+        $this->line('');
+        $this->warn('   6. Click "Generate token" and copy the token immediately');
+        $this->warn('      ⚠️  You won\'t be able to see it again!');
+        $this->line('');
+        $this->info('💡 Tip: You can also set GITHUB_API_TOKEN in your .env file to skip this prompt.');
+    }
+
+    /**
+     * Setup SSH keys on server if needed and add deploy key via API if available.
      */
     protected function setupSshKeys(): void
     {
         if (!$this->ssh->sshKeyExists()) {
             $this->info('🔑 Generating SSH keys on server...');
             $this->ssh->generateSshKey();
-            
-            $publicKey = $this->ssh->getPublicKey();
-            if ($publicKey) {
-                $this->warn('🔑 Add this SSH key to your GitHub repository:');
-                $this->warn('   Settings → Deploy keys → Add deploy key');
-                $this->line('');
-                $this->line($publicKey);
-                $this->line('');
-                
-                $this->ask('Press ENTER after adding the key to GitHub to continue...', '');
-            }
         } else {
-            $this->info('🔑 SSH keys already configured');
+            $this->info('🔑 SSH keys already exist on server');
+        }
+
+        // Get public key
+        $publicKey = $this->ssh->getPublicKey();
+        
+        if (!$publicKey) {
+            $this->error('❌ Could not retrieve public key from server');
+            return;
+        }
+
+        // Try to add deploy key via API if available
+        if ($this->githubAPI) {
+            $this->addDeployKeyViaAPI($publicKey);
+        } else {
+            // Fallback to manual method
+            $this->warn('🔑 Add this SSH key to your GitHub repository:');
+            $this->warn('   Settings → Deploy keys → Add deploy key');
+            $this->line('');
+            $this->line($publicKey);
+            $this->line('');
+            
+            $this->ask('Press ENTER after adding the key to GitHub to continue...', '');
+        }
+    }
+
+    /**
+     * Add deploy key to GitHub repository via API.
+     */
+    protected function addDeployKeyViaAPI(string $publicKey): void
+    {
+        try {
+            // Get repository information from git
+            $repoInfo = $this->github->getRepositoryInfo();
+            if (!$repoInfo) {
+                $this->warn('⚠️  Could not detect repository information. Skipping automatic deploy key setup.');
+                return;
+            }
+
+            $owner = $repoInfo['owner'];
+            $repo = $repoInfo['name'];
+
+            $this->info('🔑 Adding deploy key to GitHub repository via API...');
+
+            // Check if key already exists
+            if ($this->githubAPI->keyExists($owner, $repo, $publicKey)) {
+                $this->info('✅ Deploy key already exists in repository');
+                return;
+            }
+
+            // Create deploy key
+            $this->githubAPI->createDeployKey($owner, $repo, $publicKey, 'Hostinger Server', false);
+            $this->info('✅ Deploy key added successfully to repository');
+        } catch (\Exception $e) {
+            $this->warn('⚠️  Failed to add deploy key via API: ' . $e->getMessage());
+            $this->warn('   You may need to add it manually.');
+            
+            // Show manual instructions as fallback
+            $this->line('');
+            $this->warn('🔑 Please add this SSH key manually to your GitHub repository:');
+            $this->warn('   Settings → Deploy keys → Add deploy key');
+            $this->line('');
+            $this->line($publicKey);
+            $this->line('');
+            
+            $this->ask('Press ENTER after adding the key to GitHub to continue...', '');
         }
     }
 
@@ -434,6 +567,48 @@ class DeploySharedCommand extends Command
         }
 
         if ($publicKey) {
+            // Try to add deploy key via API if available
+            if ($this->githubAPI) {
+                try {
+                    $repoInfo = $this->github->parseRepositoryUrl($repoUrl);
+                    if ($repoInfo) {
+                        $this->info('🔑 Attempting to add deploy key via API...');
+                        
+                        // Check if key already exists
+                        if ($this->githubAPI->keyExists($repoInfo['owner'], $repoInfo['name'], $publicKey)) {
+                            $this->info('✅ Deploy key already exists in repository');
+                            // Retry deployment
+                            $this->info('🔄 Retrying deployment...');
+                            try {
+                                $commands = $this->buildDeploymentCommands($repoUrl, $siteDir, $cloneChoice);
+                                $this->ssh->executeMultiple($commands);
+                                return true;
+                            } catch (\Exception $e) {
+                                $this->warn('⚠️  Deployment still failed: ' . $e->getMessage());
+                            }
+                        } else {
+                            // Try to create the key
+                            $this->githubAPI->createDeployKey($repoInfo['owner'], $repoInfo['name'], $publicKey, 'Hostinger Server', false);
+                            $this->info('✅ Deploy key added successfully via API');
+                            // Retry deployment
+                            $this->info('🔄 Retrying deployment...');
+                            try {
+                                $commands = $this->buildDeploymentCommands($repoUrl, $siteDir, $cloneChoice);
+                                $this->ssh->executeMultiple($commands);
+                                return true;
+                            } catch (\Exception $e) {
+                                $this->warn('⚠️  Deployment still failed: ' . $e->getMessage());
+                            }
+                        }
+                    }
+                } catch (\Exception $e) {
+                    $this->warn('⚠️  Failed to add deploy key via API: ' . $e->getMessage());
+                    $this->warn('   Falling back to manual method...');
+                    $this->line('');
+                }
+            }
+
+            // Fallback to manual method
             // Get repository information
             $repoInfo = $this->github->parseRepositoryUrl($repoUrl);
             

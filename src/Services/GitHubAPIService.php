@@ -135,45 +135,106 @@ class GitHubAPIService
     }
 
     /**
-     * Create or update a workflow file.
+     * Get all deploy keys for a repository.
      */
-    public function createOrUpdateWorkflowFile(string $owner, string $repo, string $branch, string $workflowContent): bool
+    public function getDeployKeys(string $owner, string $repo): array
     {
-        $filePath = '.github/workflows/hostinger-deploy.yml';
-
-        // Check if file exists
-        $existingResponse = Http::withHeaders([
+        $response = Http::withHeaders([
             'Accept' => 'application/vnd.github.v3+json',
             'Authorization' => "Bearer {$this->token}",
             'X-GitHub-Api-Version' => '2022-11-28',
-        ])->get("{$this->baseUrl}/repos/{$owner}/{$repo}/contents/{$filePath}");
+        ])->get("{$this->baseUrl}/repos/{$owner}/{$repo}/keys");
 
-        $sha = null;
-        if ($existingResponse->successful()) {
-            $sha = $existingResponse->json()['sha'];
+        if (!$response->successful()) {
+            throw new Exception("Failed to get deploy keys: " . $response->body());
         }
 
-        $data = [
-            'message' => $sha ? 'Update Hostinger deployment workflow' : 'Add Hostinger deployment workflow',
-            'content' => base64_encode($workflowContent),
-            'branch' => $branch,
-        ];
+        return $response->json();
+    }
 
-        if ($sha) {
-            $data['sha'] = $sha;
+    /**
+     * Check if a deploy key already exists (by comparing the key content).
+     */
+    public function keyExists(string $owner, string $repo, string $publicKey): bool
+    {
+        try {
+            $keys = $this->getDeployKeys($owner, $repo);
+            
+            // Extract the key part from the public key (remove comment, whitespace, etc.)
+            $normalizeKey = function($key) {
+                // Remove comment part and normalize whitespace
+                $parts = explode(' ', trim($key));
+                return isset($parts[1]) ? $parts[0] . ' ' . $parts[1] : $key;
+            };
+            
+            $normalizedTargetKey = $normalizeKey($publicKey);
+            
+            foreach ($keys as $key) {
+                if (isset($key['key'])) {
+                    $normalizedExistingKey = $normalizeKey($key['key']);
+                    if ($normalizedExistingKey === $normalizedTargetKey) {
+                        return true;
+                    }
+                }
+            }
+            
+            return false;
+        } catch (Exception $e) {
+            // If we can't check, assume it doesn't exist
+            return false;
+        }
+    }
+
+    /**
+     * Create a deploy key for a repository.
+     * 
+     * @param string $owner Repository owner
+     * @param string $repo Repository name
+     * @param string $publicKey The public SSH key
+     * @param string $title Optional title for the deploy key (default: "Hostinger Server")
+     * @param bool $readOnly Whether the key should be read-only (default: false)
+     * @return array The created deploy key data
+     */
+    public function createDeployKey(string $owner, string $repo, string $publicKey, string $title = 'Hostinger Server', bool $readOnly = false): array
+    {
+        // Check if key already exists
+        if ($this->keyExists($owner, $repo, $publicKey)) {
+            throw new Exception("Deploy key already exists for this repository");
         }
 
         $response = Http::withHeaders([
             'Accept' => 'application/vnd.github.v3+json',
             'Authorization' => "Bearer {$this->token}",
             'X-GitHub-Api-Version' => '2022-11-28',
-        ])->put(
-            "{$this->baseUrl}/repos/{$owner}/{$repo}/contents/{$filePath}",
-            $data
+        ])->post(
+            "{$this->baseUrl}/repos/{$owner}/{$repo}/keys",
+            [
+                'title' => $title,
+                'key' => trim($publicKey),
+                'read_only' => $readOnly,
+            ]
         );
 
         if (!$response->successful()) {
-            throw new Exception("Failed to create/update workflow file: " . $response->body());
+            throw new Exception("Failed to create deploy key: " . $response->body());
+        }
+
+        return $response->json();
+    }
+
+    /**
+     * Delete a deploy key by ID.
+     */
+    public function deleteDeployKey(string $owner, string $repo, int $keyId): bool
+    {
+        $response = Http::withHeaders([
+            'Accept' => 'application/vnd.github.v3+json',
+            'Authorization' => "Bearer {$this->token}",
+            'X-GitHub-Api-Version' => '2022-11-28',
+        ])->delete("{$this->baseUrl}/repos/{$owner}/{$repo}/keys/{$keyId}");
+
+        if (!$response->successful()) {
+            throw new Exception("Failed to delete deploy key: " . $response->body());
         }
 
         return true;

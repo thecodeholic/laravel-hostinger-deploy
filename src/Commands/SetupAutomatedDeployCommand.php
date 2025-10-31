@@ -14,14 +14,14 @@ class SetupAutomatedDeployCommand extends Command
      * The name and signature of the console command.
      */
     protected $signature = 'hostinger:setup-automated-deploy 
-                            {--token= : GitHub API token}
+                            {--token= : GitHub Personal Access Token}
                             {--branch= : Override default branch}
                             {--php-version= : Override PHP version}';
 
     /**
      * The console command description.
      */
-    protected $description = 'Setup automated deployment using GitHub API (creates workflow and secrets)';
+    protected $description = 'Setup automated deployment (publishes workflow file and creates secrets)';
 
     protected SshConnectionService $ssh;
     protected GitHubActionsService $github;
@@ -76,6 +76,9 @@ class SetupAutomatedDeployCommand extends Command
             return self::FAILURE;
         }
 
+        // Add deploy key to repository via API
+        $this->addDeployKeyToRepository($repoInfo);
+
         // Get SSH information
         $sshHost = config('hostinger-deploy.ssh.host');
         $sshUsername = config('hostinger-deploy.ssh.username');
@@ -105,7 +108,14 @@ class SetupAutomatedDeployCommand extends Command
         $this->line('');
         $this->info("🌐 Your Laravel application: https://{$siteDir}");
         $this->line('');
-        $this->info('🚀 Your repository will now automatically deploy on push to the configured branch!');
+        $this->info('📋 Next steps:');
+        $this->line('   1. Review the workflow file at .github/workflows/hostinger-deploy.yml');
+        $this->line('   2. Commit and push the workflow file:');
+        $this->line('      git add .github/workflows/hostinger-deploy.yml');
+        $this->line('      git commit -m "Add Hostinger deployment workflow"');
+        $this->line('      git push');
+        $this->line('');
+        $this->info('🚀 Once pushed, your repository will automatically deploy on push to the configured branch!');
 
         return self::SUCCESS;
     }
@@ -153,9 +163,9 @@ class SetupAutomatedDeployCommand extends Command
             $token = $this->option('token') ?: env('GITHUB_API_TOKEN');
 
             if (!$token) {
-                $this->error('❌ GitHub API token is required.');
+                $this->error('❌ GitHub Personal Access Token is required.');
                 $this->line('');
-                $this->warn('💡 How to provide your GitHub API token:');
+                $this->warn('💡 How to provide your GitHub Personal Access Token:');
                 $this->line('   Option 1: Set GITHUB_API_TOKEN in your .env file');
                 $this->line('   Option 2: Use --token=YOUR_TOKEN option when running this command');
                 $this->line('');
@@ -167,10 +177,8 @@ class SetupAutomatedDeployCommand extends Command
                 $this->line('   5. Select the following permissions:');
                 $this->line('');
                 $this->info('   📋 Required Permissions:');
-                $this->info('      ✓ Contents → Read and write');
-                $this->info('        (Allows creating/updating files, commits, and branches)');
-                $this->info('      ✓ Workflows → Read and write');
-                $this->info('        (Allows creating/updating GitHub Actions workflows)');
+                $this->info('      ✓ Administration → Read and write');
+                $this->info('        (Allows managing deploy keys for the repository)');
                 $this->info('      ✓ Metadata → Read-only');
                 $this->info('        (Automatically selected, required for API access)');
                 $this->line('');
@@ -239,30 +247,84 @@ class SetupAutomatedDeployCommand extends Command
     }
 
     /**
-     * Create workflow file via GitHub API.
+     * Add deploy key to GitHub repository via API.
+     */
+    protected function addDeployKeyToRepository(array $repoInfo): void
+    {
+        try {
+            $publicKey = $this->ssh->getPublicKey();
+            
+            if (!$publicKey) {
+                $this->warn('⚠️  Could not retrieve public key. Skipping deploy key setup.');
+                return;
+            }
+
+            $owner = $repoInfo['owner'];
+            $repo = $repoInfo['name'];
+
+            $this->info('🔑 Adding deploy key to GitHub repository via API...');
+
+            // Check if key already exists
+            if ($this->githubAPI->keyExists($owner, $repo, $publicKey)) {
+                $this->info('✅ Deploy key already exists in repository');
+                return;
+            }
+
+            // Create deploy key
+            $this->githubAPI->createDeployKey($owner, $repo, $publicKey, 'Hostinger Server', false);
+            $this->info('✅ Deploy key added successfully to repository');
+        } catch (\Exception $e) {
+            $this->warn('⚠️  Failed to add deploy key via API: ' . $e->getMessage());
+            $this->warn('   You may need to add it manually.');
+            $this->line('');
+            $this->info('📋 To add manually, go to:');
+            $this->line("   https://github.com/{$repoInfo['owner']}/{$repoInfo['name']}/settings/keys");
+            $this->line('');
+        }
+    }
+
+    /**
+     * Publish workflow file locally.
      */
     protected function createWorkflowFile(array $repoInfo): bool
     {
         try {
-            $this->info('📄 Creating GitHub Actions workflow file...');
+            $this->info('📄 Publishing GitHub Actions workflow file locally...');
 
             // Get branch
             $branch = $this->option('branch') ?: $this->github->getCurrentBranch() ?: config('hostinger-deploy.github.default_branch', 'main');
             $phpVersion = $this->option('php-version') ?: config('hostinger-deploy.github.php_version', '8.3');
+            
+            // Get workflow file path
+            $workflowFile = config('hostinger-deploy.github.workflow_file', '.github/workflows/hostinger-deploy.yml');
+
+            // Create .github/workflows directory if it doesn't exist
+            $workflowDir = dirname($workflowFile);
+            if (!File::exists($workflowDir)) {
+                File::makeDirectory($workflowDir, 0755, true);
+                $this->info("📁 Created directory: {$workflowDir}");
+            }
+
+            // Check if file already exists
+            if (File::exists($workflowFile)) {
+                if (!$this->confirm("Workflow file already exists at {$workflowFile}. Overwrite it?", true)) {
+                    $this->warn('⚠️  Skipping workflow file creation. Using existing file.');
+                    return true;
+                }
+            }
 
             // Generate workflow content
             $workflowContent = $this->generateWorkflowContent($branch, $phpVersion);
 
-            // Create or update workflow file via API
-            $this->githubAPI->createOrUpdateWorkflowFile(
-                $repoInfo['owner'],
-                $repoInfo['name'],
-                $branch,
-                $workflowContent
-            );
-
-            $this->info('✅ Workflow file created successfully');
-            return true;
+            // Write workflow file
+            if (File::put($workflowFile, $workflowContent)) {
+                $this->info("✅ Workflow file published: {$workflowFile}");
+                $this->warn('⚠️  Please review the workflow file, commit it, and push to trigger deployments.');
+                return true;
+            } else {
+                $this->error("❌ Failed to create workflow file: {$workflowFile}");
+                return false;
+            }
         } catch (\Exception $e) {
             $this->error("❌ Failed to create workflow file: " . $e->getMessage());
             return false;
