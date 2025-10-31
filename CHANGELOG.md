@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.2.0] - 2025-01-XX
 
+### Added
+- Automatic npm build support: `hostinger:deploy` now automatically detects `package.json` and builds frontend assets locally before deployment
+- Built asset copying: Automatically copies `public/build/` directory to the remote server using rsync after deployment
+- GitHub Actions workflow enhancements:
+  - SSH key installation step for secure authentication
+  - Automatic copying of built frontend assets to the remote server
+  - Support for projects with npm/frontend build requirements
+
 ### Changed
 - Refactored all commands to extend `BaseHostingerCommand` base class for better code organization and DRY principles
 - Renamed `hostinger:deploy-shared` to `hostinger:deploy` (simpler, more intuitive name)
@@ -17,6 +25,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Reduced code duplication by extracting common methods into `BaseHostingerCommand`
 - Improved maintainability - changes to shared logic now only need to be made once
 - Better code organization with centralized configuration validation, SSH setup, and GitHub API initialization
+- Frontend assets are now built locally (no npm required on shared hosting servers)
 
 ## [0.1.0] - 2025-10-31
 
