@@ -23,7 +23,7 @@ composer require thecodeholic/laravel-hostinger-deploy --dev
 The easiest way to deploy and set up automated deployment:
 
 ```bash
-php artisan hostinger:deploy-and-setup-automated
+php artisan hostinger:deploy-and-setup-cicd
 ```
 
 ### Required Environment Variables
@@ -57,7 +57,7 @@ GITHUB_API_TOKEN=your-github-token
 ### 1. Manual Deployment Only
 
 ```bash
-php artisan hostinger:deploy-shared
+php artisan hostinger:deploy
 ```
 
 **What it does:** Deploys your Laravel application to Hostinger server (composer install, migrations, storage link, etc.)
@@ -114,7 +114,7 @@ php artisan hostinger:publish-workflow
 ### 4. Setup Automated Deployment (Via GitHub API)
 
 ```bash
-php artisan hostinger:setup-automated-deploy
+php artisan hostinger:setup-cicd
 ```
 
 **What it does:** Publishes GitHub Actions workflow file locally and creates secrets automatically via GitHub API, and automatically adds deploy keys to your repository

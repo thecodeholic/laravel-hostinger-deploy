@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.0] - 2025-01-XX
+
+### Changed
+- Refactored all commands to extend `BaseHostingerCommand` base class for better code organization and DRY principles
+- Renamed `hostinger:deploy-shared` to `hostinger:deploy` (simpler, more intuitive name)
+- Renamed `hostinger:setup-automated-deploy` to `hostinger:setup-cicd` (more accurate terminology)
+- Renamed `hostinger:deploy-and-setup-automated` to `hostinger:deploy-and-setup-cicd` (consistent naming)
+
+### Improved
+- Reduced code duplication by extracting common methods into `BaseHostingerCommand`
+- Improved maintainability - changes to shared logic now only need to be made once
+- Better code organization with centralized configuration validation, SSH setup, and GitHub API initialization
+
 ## [0.1.0] - 2025-10-31
 
 ### Added

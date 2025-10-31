@@ -2,17 +2,12 @@
 
 namespace TheCodeholic\LaravelHostingerDeploy\Commands;
 
-use Illuminate\Console\Command;
-use TheCodeholic\LaravelHostingerDeploy\Services\SshConnectionService;
-use TheCodeholic\LaravelHostingerDeploy\Services\GitHubActionsService;
-use TheCodeholic\LaravelHostingerDeploy\Services\GitHubAPIService;
-
-class DeploySharedCommand extends Command
+class DeploySharedCommand extends BaseHostingerCommand
 {
     /**
      * The name and signature of the console command.
      */
-    protected $signature = 'hostinger:deploy-shared 
+    protected $signature = 'hostinger:deploy 
                             {--fresh : Delete and clone fresh repository}
                             {--site-dir= : Override site directory from config}
                             {--token= : GitHub Personal Access Token}';
@@ -21,16 +16,6 @@ class DeploySharedCommand extends Command
      * The console command description.
      */
     protected $description = 'Deploy Laravel application to Hostinger shared hosting';
-
-    protected SshConnectionService $ssh;
-    protected GitHubActionsService $github;
-    protected ?GitHubAPIService $githubAPI = null;
-
-    public function __construct()
-    {
-        parent::__construct();
-        $this->github = new GitHubActionsService();
-    }
 
     /**
      * Execute the console command.
@@ -54,7 +39,7 @@ class DeploySharedCommand extends Command
         $this->info("📦 Repository: {$repoUrl}");
 
         // Initialize GitHub API (optional, for automatic deploy key management)
-        $this->initializeGitHubAPI($repoUrl);
+        $this->initializeGitHubAPI($repoUrl, false);
 
         // Setup SSH connection
         $this->setupSshConnection();
@@ -73,66 +58,12 @@ class DeploySharedCommand extends Command
             return self::FAILURE;
         }
 
-        $this->info('🎉 Deployment completed successfully!');
-        $this->info("🌐 Your Laravel application is now live at: https://{$this->getSiteDir()}");
+        $this->info('✅ Deployment completed successfully!');
+        $this->info("🌐 Your Laravel application: https://{$this->getSiteDir()}");
 
         return self::SUCCESS;
     }
 
-    /**
-     * Validate required configuration.
-     */
-    protected function validateConfiguration(): bool
-    {
-        $required = [
-            'HOSTINGER_SSH_HOST' => config('hostinger-deploy.ssh.host'),
-            'HOSTINGER_SSH_USERNAME' => config('hostinger-deploy.ssh.username'),
-            'HOSTINGER_SITE_DIR' => $this->getSiteDir(),
-        ];
-
-        foreach ($required as $key => $value) {
-            if (empty($value)) {
-                $this->error("❌ Missing required environment variable: {$key}");
-                $this->info("Please add {$key} to your .env file");
-                return false;
-            }
-        }
-
-        return true;
-    }
-
-    /**
-     * Get repository URL from Git.
-     */
-    protected function getRepositoryUrl(): ?string
-    {
-        $repoUrl = $this->github->getRepositoryUrl();
-        
-        if (!$repoUrl) {
-            return null;
-        }
-
-        $this->info("✅ Detected Git repository: {$repoUrl}");
-        
-        if (!$this->confirm('Use this repository for deployment?', 'yes')) {
-            $repoUrl = $this->ask('Enter your Git repository URL');
-        }
-
-        return $repoUrl;
-    }
-
-    /**
-     * Setup SSH connection service.
-     */
-    protected function setupSshConnection(): void
-    {
-        $this->ssh = new SshConnectionService(
-            config('hostinger-deploy.ssh.host'),
-            config('hostinger-deploy.ssh.username'),
-            config('hostinger-deploy.ssh.port', 22),
-            config('hostinger-deploy.ssh.timeout', 30)
-        );
-    }
 
     /**
      * Deploy application to server.
@@ -144,7 +75,7 @@ class DeploySharedCommand extends Command
 
         try {
             // Setup SSH keys if needed
-            $this->setupSshKeys();
+            $this->setupSshKeysForDeployment();
 
             // Check folder status and get deployment choice
             $cloneChoice = $this->getDeploymentChoice($siteDir, $isFresh);
@@ -183,89 +114,15 @@ class DeploySharedCommand extends Command
         }
     }
 
-    /**
-     * Initialize GitHub API service (optional).
-     */
-    protected function initializeGitHubAPI(?string $repoUrl = null): void
-    {
-        try {
-            $token = $this->option('token') ?: env('GITHUB_API_TOKEN');
-
-            if (!$token) {
-                $this->line('');
-                $this->warn('⚠️  GitHub Personal Access Token is not set.');
-                $this->line('');
-                
-                if (!$this->confirm('Do you want to proceed?', true)) {
-                    // User chose "no" - show instructions and halt
-                    $this->line('');
-                    $this->showGitHubTokenInstructions();
-                    $this->line('');
-                    $this->info('📝 Please add GITHUB_API_TOKEN to your .env file and rerun the script.');
-                    $this->line('');
-                    exit(0);
-                }
-                
-                // User chose "yes" - continue without token, deploy key will be shown manually
-                $this->warn('⚠️  Continuing without Personal Access Token. Deploy key will be displayed for manual addition.');
-                return;
-            }
-
-            $this->githubAPI = new GitHubAPIService($token);
-
-            // Test API connection
-            if (!$this->githubAPI->testConnection()) {
-                $this->warn('⚠️  GitHub API connection failed. Deploy key will need to be added manually.');
-                $this->githubAPI = null;
-                return;
-            }
-
-            $this->info('✅ GitHub API connection successful');
-        } catch (\Exception $e) {
-            // API is optional, continue without it
-            $this->warn('⚠️  GitHub API initialization failed: ' . $e->getMessage());
-            $this->warn('   Deploy key will need to be added manually.');
-            $this->githubAPI = null;
-        }
-    }
-
-    /**
-     * Show instructions for generating GitHub Personal Access Token.
-     */
-    protected function showGitHubTokenInstructions(): void
-    {
-        $this->info('🔑 To create a GitHub Personal Access Token:');
-        $this->line('');
-        $this->line('   1. Go to: https://github.com/settings/personal-access-tokens');
-        $this->line('   2. Click "Generate new token" → "Generate new token (classic)"');
-        $this->line('   3. Give your token a descriptive name (e.g., "Hostinger Deploy")');
-        $this->line('   4. Set expiration (or no expiration)');
-        $this->line('   5. Select the following permissions:');
-        $this->line('');
-        $this->info('   📋 Required Permissions:');
-        $this->info('      ✓ Administration → Read and write');
-        $this->info('        (Allows managing deploy keys for the repository)');
-        $this->info('      ✓ Secrets → Read and write');
-        $this->info('        (Allows creating/updating GitHub Actions secrets)');
-        $this->info('      ✓ Metadata → Read-only');
-        $this->info('        (Automatically selected, required for API access)');
-        $this->line('');
-        $this->warn('   6. Click "Generate token" and copy the token immediately');
-        $this->warn('      ⚠️  You won\'t be able to see it again!');
-        $this->line('');
-        $this->info('💡 Tip: You can also set GITHUB_API_TOKEN in your .env file to skip this prompt.');
-    }
 
     /**
      * Setup SSH keys on server if needed and add deploy key via API if available.
+     * Does not display the key to user - only shows it on actual permission errors.
      */
-    protected function setupSshKeys(): void
+    protected function setupSshKeysForDeployment(): void
     {
-        if (!$this->ssh->sshKeyExists()) {
-            $this->info('🔑 Generating SSH keys on server...');
-            $this->ssh->generateSshKey();
-        } else {
-            $this->info('🔑 SSH keys already exist on server');
+        if (!$this->setupSshKeys(false)) {
+            return;
         }
 
         // Get public key
@@ -276,63 +133,27 @@ class DeploySharedCommand extends Command
             return;
         }
 
-        // Try to add deploy key via API if available
+        // Try to add deploy key via API if available (silently)
         if ($this->githubAPI) {
-            $this->addDeployKeyViaAPI($publicKey);
-        } else {
-            // Fallback to manual method
-            $this->warn('🔑 Add this SSH key to your GitHub repository:');
-            $this->warn('   Settings → Deploy keys → Add deploy key');
-            $this->line('');
-            $this->line($publicKey);
-            $this->line('');
-            
-            $this->ask('Press ENTER after adding the key to GitHub to continue...', '');
+            // Try to add via API, but don't show manual instructions if it fails
+            // The key will be shown only if git clone fails with permission error
+            try {
+                $repoInfo = $this->github->getRepositoryInfo();
+                if ($repoInfo) {
+                    if ($this->githubAPI->keyExists($repoInfo['owner'], $repoInfo['name'], $publicKey)) {
+                        // Key already exists, nothing to do
+                        return;
+                    }
+                    // Try to add the key
+                    $this->githubAPI->createDeployKey($repoInfo['owner'], $repoInfo['name'], $publicKey, 'Hostinger Server', false);
+                }
+            } catch (\Exception $e) {
+                // Silent failure - will be handled if git clone fails
+            }
         }
+        // If no API, we'll handle it when git clone fails with permission error
     }
 
-    /**
-     * Add deploy key to GitHub repository via API.
-     */
-    protected function addDeployKeyViaAPI(string $publicKey): void
-    {
-        try {
-            // Get repository information from git
-            $repoInfo = $this->github->getRepositoryInfo();
-            if (!$repoInfo) {
-                $this->warn('⚠️  Could not detect repository information. Skipping automatic deploy key setup.');
-                return;
-            }
-
-            $owner = $repoInfo['owner'];
-            $repo = $repoInfo['name'];
-
-            $this->info('🔑 Adding deploy key to GitHub repository via API...');
-
-            // Check if key already exists
-            if ($this->githubAPI->keyExists($owner, $repo, $publicKey)) {
-                $this->info('✅ Deploy key already exists in repository');
-                return;
-            }
-
-            // Create deploy key
-            $this->githubAPI->createDeployKey($owner, $repo, $publicKey, 'Hostinger Server', false);
-            $this->info('✅ Deploy key added successfully to repository');
-        } catch (\Exception $e) {
-            $this->warn('⚠️  Failed to add deploy key via API: ' . $e->getMessage());
-            $this->warn('   You may need to add it manually.');
-            
-            // Show manual instructions as fallback
-            $this->line('');
-            $this->warn('🔑 Please add this SSH key manually to your GitHub repository:');
-            $this->warn('   Settings → Deploy keys → Add deploy key');
-            $this->line('');
-            $this->line($publicKey);
-            $this->line('');
-            
-            $this->ask('Press ENTER after adding the key to GitHub to continue...', '');
-        }
-    }
 
     /**
      * Check folder status and get deployment choice from user.
@@ -504,48 +325,6 @@ class DeploySharedCommand extends Command
         return $commands;
     }
 
-    /**
-     * Get site directory from option or config.
-     */
-    protected function getSiteDir(): string
-    {
-        return $this->option('site-dir') ?: config('hostinger-deploy.deployment.site_dir');
-    }
-
-    /**
-     * Get absolute path for the site directory.
-     */
-    protected function getAbsoluteSitePath(string $siteDir): string
-    {
-        $username = config('hostinger-deploy.ssh.username');
-        return "/home/{$username}/domains/{$siteDir}";
-    }
-
-    /**
-     * Check if the exception is a git authentication error.
-     */
-    protected function isGitAuthenticationError(\Exception $e): bool
-    {
-        $errorMessage = $e->getMessage();
-        
-        // Check for common git authentication error messages
-        $authErrorPatterns = [
-            'Repository not found',
-            'Could not read from remote repository',
-            'Permission denied',
-            'Please make sure you have the correct access rights',
-            'Host key verification failed',
-            'Authentication failed',
-        ];
-
-        foreach ($authErrorPatterns as $pattern) {
-            if (stripos($errorMessage, $pattern) !== false) {
-                return true;
-            }
-        }
-
-        return false;
-    }
 
     /**
      * Handle git authentication error by displaying public key and instructions.
@@ -567,39 +346,47 @@ class DeploySharedCommand extends Command
         }
 
         if ($publicKey) {
-            // Try to add deploy key via API if available
-            if ($this->githubAPI) {
+            // Get repository information
+            $repoInfo = $this->github->parseRepositoryUrl($repoUrl);
+            
+            // Check if deploy key already exists (via API if available)
+            $keyExists = false;
+            if ($this->githubAPI && $repoInfo) {
                 try {
-                    $repoInfo = $this->github->parseRepositoryUrl($repoUrl);
-                    if ($repoInfo) {
-                        $this->info('🔑 Attempting to add deploy key via API...');
-                        
-                        // Check if key already exists
-                        if ($this->githubAPI->keyExists($repoInfo['owner'], $repoInfo['name'], $publicKey)) {
-                            $this->info('✅ Deploy key already exists in repository');
-                            // Retry deployment
-                            $this->info('🔄 Retrying deployment...');
-                            try {
-                                $commands = $this->buildDeploymentCommands($repoUrl, $siteDir, $cloneChoice);
-                                $this->ssh->executeMultiple($commands);
-                                return true;
-                            } catch (\Exception $e) {
-                                $this->warn('⚠️  Deployment still failed: ' . $e->getMessage());
-                            }
-                        } else {
-                            // Try to create the key
-                            $this->githubAPI->createDeployKey($repoInfo['owner'], $repoInfo['name'], $publicKey, 'Hostinger Server', false);
-                            $this->info('✅ Deploy key added successfully via API');
-                            // Retry deployment
-                            $this->info('🔄 Retrying deployment...');
-                            try {
-                                $commands = $this->buildDeploymentCommands($repoUrl, $siteDir, $cloneChoice);
-                                $this->ssh->executeMultiple($commands);
-                                return true;
-                            } catch (\Exception $e) {
-                                $this->warn('⚠️  Deployment still failed: ' . $e->getMessage());
-                            }
+                    $keyExists = $this->githubAPI->keyExists($repoInfo['owner'], $repoInfo['name'], $publicKey);
+                    if ($keyExists) {
+                        $this->info('✅ Deploy key already exists in repository');
+                        // Retry deployment
+                        $this->info('🔄 Retrying deployment...');
+                        try {
+                            $commands = $this->buildDeploymentCommands($repoUrl, $siteDir, $cloneChoice);
+                            $this->ssh->executeMultiple($commands);
+                            return true;
+                        } catch (\Exception $e) {
+                            $this->warn('⚠️  Deployment still failed: ' . $e->getMessage());
+                            // Continue to show the key below
                         }
+                    }
+                } catch (\Exception $e) {
+                    // If check fails, proceed to show the key
+                }
+            }
+            
+            // If key doesn't exist, try to add via API first
+            if (!$keyExists && $this->githubAPI && $repoInfo) {
+                try {
+                    $this->info('🔑 Attempting to add deploy key via API...');
+                    $this->githubAPI->createDeployKey($repoInfo['owner'], $repoInfo['name'], $publicKey, 'Hostinger Server', false);
+                    $this->info('✅ Deploy key added successfully via API');
+                    // Retry deployment
+                    $this->info('🔄 Retrying deployment...');
+                    try {
+                        $commands = $this->buildDeploymentCommands($repoUrl, $siteDir, $cloneChoice);
+                        $this->ssh->executeMultiple($commands);
+                        return true;
+                    } catch (\Exception $e) {
+                        $this->warn('⚠️  Deployment still failed: ' . $e->getMessage());
+                        // Continue to show manual instructions below
                     }
                 } catch (\Exception $e) {
                     $this->warn('⚠️  Failed to add deploy key via API: ' . $e->getMessage());
@@ -607,76 +394,78 @@ class DeploySharedCommand extends Command
                     $this->line('');
                 }
             }
-
-            // Fallback to manual method
-            // Get repository information
-            $repoInfo = $this->github->parseRepositoryUrl($repoUrl);
             
-            $this->info('📋 Add this SSH public key to your GitHub repository:');
-            $this->line('');
-            
-            if ($repoInfo) {
-                $deployKeysUrl = $this->github->getDeployKeysUrl($repoInfo['owner'], $repoInfo['name']);
-                $this->line("   Go to: {$deployKeysUrl}");
-            } else {
-                $this->line("   Go to: Your repository → Settings → Deploy keys");
-            }
-            
-            $this->line('');
-            $this->warn('   Steps:');
-            $this->line('   1. Click "Add deploy key"');
-            $this->line('   2. Give it a title (e.g., "Hostinger Server")');
-            $this->line('   3. Paste the public key below');
-            $this->line('   4. ✅ Check "Allow write access" (optional, for deployments)');
-            $this->line('   5. Click "Add key"');
-            $this->line('');
-            $this->line('   ' . str_repeat('-', 60));
-            $this->line($publicKey);
-            $this->line('   ' . str_repeat('-', 60));
-            $this->line('');
-            
-            // Retry loop - keep asking until deployment succeeds or user gives up
-            $maxRetries = 3;
-            $attempt = 0;
-            
-            while ($attempt < $maxRetries) {
-                $this->ask('Press ENTER after you have added the deploy key to GitHub to continue...', '');
-                $this->info('🔄 Retrying deployment...');
+            // Only show deploy key if it doesn't exist and needs to be added manually
+            if (!$keyExists) {
+                $this->info('📋 Add this SSH public key to your GitHub repository:');
+                $this->line('');
                 
-                try {
-                    $commands = $this->buildDeploymentCommands($repoUrl, $siteDir, $cloneChoice);
-                    $this->ssh->executeMultiple($commands);
+                if ($repoInfo) {
+                    $deployKeysUrl = $this->github->getDeployKeysUrl($repoInfo['owner'], $repoInfo['name']);
+                    $this->line("   Go to: {$deployKeysUrl}");
+                } else {
+                    $this->line("   Go to: Your repository → Settings → Deploy keys");
+                }
+                
+                $this->line('');
+                $this->warn('   Steps:');
+                $this->line('   1. Click "Add deploy key"');
+                $this->line('   2. Give it a title (e.g., "Hostinger Server")');
+                $this->line('   3. Paste the public key below');
+                $this->line('   4. ✅ Check "Allow write access" (optional, for deployments)');
+                $this->line('   5. Click "Add key"');
+                $this->line('');
+                $this->line('   ' . str_repeat('-', 60));
+                $this->line($publicKey);
+                $this->line('   ' . str_repeat('-', 60));
+                $this->line('');
+                
+                // Retry loop - keep asking until deployment succeeds or user gives up
+                $maxRetries = 3;
+                $attempt = 0;
+                
+                while ($attempt < $maxRetries) {
+                    $this->ask('Press ENTER after you have added the deploy key to GitHub to continue...', '');
+                    $this->info('🔄 Retrying deployment...');
                     
-                    // Success - let main handle method display success message
-                    return true;
-                } catch (\Exception $e) {
-                    $attempt++;
-                    
-                    // Check if it's still an authentication error
-                    if ($this->isGitAuthenticationError($e) && $attempt < $maxRetries) {
-                        $this->line('');
-                        $this->warn("⚠️  Authentication still failed (attempt {$attempt}/{$maxRetries})");
-                        $this->line('');
-                        $this->warn('💡 Please make sure:');
-                        $this->line('   1. You have copied the public key correctly');
-                        $this->line('   2. You have added it as a deploy key (not SSH key)');
-                        $this->line('   3. You have saved the deploy key');
-                        $this->line('');
-                        $this->info('📋 Here is your public key again:');
-                        $this->line('');
-                        $this->line('   ' . str_repeat('-', 60));
-                        $this->line($publicKey);
-                        $this->line('   ' . str_repeat('-', 60));
-                        $this->line('');
-                        continue;
-                    } else {
-                        // Not an auth error or max retries reached
-                        return $this->handleDeploymentFailure($e, $repoUrl, $attempt >= $maxRetries);
+                    try {
+                        $commands = $this->buildDeploymentCommands($repoUrl, $siteDir, $cloneChoice);
+                        $this->ssh->executeMultiple($commands);
+                        
+                        // Success - let main handle method display success message
+                        return true;
+                    } catch (\Exception $e) {
+                        $attempt++;
+                        
+                        // Check if it's still an authentication error
+                        if ($this->isGitAuthenticationError($e) && $attempt < $maxRetries) {
+                            $this->line('');
+                            $this->warn("⚠️  Authentication still failed (attempt {$attempt}/{$maxRetries})");
+                            $this->line('');
+                            $this->warn('💡 Please make sure:');
+                            $this->line('   1. You have copied the public key correctly');
+                            $this->line('   2. You have added it as a deploy key (not SSH key)');
+                            $this->line('   3. You have saved the deploy key');
+                            $this->line('');
+                            $this->info('📋 Here is your public key again:');
+                            $this->line('');
+                            $this->line('   ' . str_repeat('-', 60));
+                            $this->line($publicKey);
+                            $this->line('   ' . str_repeat('-', 60));
+                            $this->line('');
+                            continue;
+                        } else {
+                            // Not an auth error or max retries reached
+                            return $this->handleDeploymentFailure($e, $repoUrl, $attempt >= $maxRetries);
+                        }
                     }
                 }
+                
+                return false;
+            } else {
+                // Key already exists but deployment still failed - show error
+                return $this->handleDeploymentFailure(new \Exception('Deployment failed even though deploy key exists'), $repoUrl, false);
             }
-            
-            return false;
         } else {
             $this->error('❌ Could not retrieve or generate SSH public key.');
             return false;
