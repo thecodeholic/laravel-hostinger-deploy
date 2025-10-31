@@ -77,25 +77,7 @@ php artisan hostinger:deploy
 
 ---
 
-### 2. Setup Automated Deployment (Manual)
-
-```bash
-php artisan hostinger:auto-deploy
-```
-
-**What it does:** Generates SSH keys on server and displays GitHub secrets/variables for manual setup
-
-**Required Environment Variables:**
-- `HOSTINGER_SSH_HOST`
-- `HOSTINGER_SSH_USERNAME`
-- `HOSTINGER_SSH_PORT`
-- `HOSTINGER_SITE_DIR`
-
-**No options** - Run this command, then manually add the displayed secrets to GitHub
-
----
-
-### 3. Create GitHub Actions Workflow File
+### 2. Create GitHub Actions Workflow File
 
 ```bash
 php artisan hostinger:publish-workflow
@@ -111,7 +93,7 @@ php artisan hostinger:publish-workflow
 
 ---
 
-### 4. Setup Automated Deployment (Via GitHub API)
+### 3. Setup Automated Deployment (Via GitHub API)
 
 ```bash
 php artisan hostinger:setup-cicd

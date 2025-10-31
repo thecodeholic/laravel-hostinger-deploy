@@ -33,7 +33,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Initial stable release
 - `hostinger:deploy-and-setup-automated` - All-in-one command for deployment and automated setup
 - `hostinger:deploy-shared` - Manual deployment to Hostinger shared hosting
-- `hostinger:auto-deploy` - Setup automated deployment with manual GitHub secrets configuration
 - `hostinger:publish-workflow` - Create GitHub Actions workflow file locally
 - `hostinger:setup-automated-deploy` - Setup automated deployment via GitHub API
 - SSH key generation and management on Hostinger server
