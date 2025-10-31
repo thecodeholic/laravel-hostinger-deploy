@@ -146,6 +146,22 @@ jobs:
             echo "ℹ️ No build script found in package.json"
           fi
 
+      - name: Install SSH key
+        run: |
+          mkdir -p ~/.ssh/
+          echo "${{ secrets.SSH_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -t rsa -p ${{ secrets.SSH_PORT }} ${{ secrets.SSH_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Copy Build Files to Target Server
+        continue-on-error: true
+        run: |
+          if [ -d "${{ github.workspace }}/public/build" ]; then
+            rsync -r -e "ssh -p ${{ secrets.SSH_PORT }}" ${{ github.workspace }}/public/build/ ${{ secrets.SSH_USERNAME }}@${{ secrets.SSH_HOST }}:~/domains/${{ secrets.WEBSITE_FOLDER }}/public/build
+          else
+            echo "ℹ️ No build directory found, skipping asset copy"
+          fi
+
       - name: Deploy to Hostinger Server
         uses: appleboy/ssh-action@master
         with:

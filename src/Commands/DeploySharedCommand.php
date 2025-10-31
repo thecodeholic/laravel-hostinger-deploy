@@ -52,11 +52,17 @@ class DeploySharedCommand extends BaseHostingerCommand
 
         $this->info('✅ SSH connection successful');
 
+        // Build frontend assets if package.json exists
+        $this->buildFrontendAssets();
+
         // Deploy to server
         if (!$this->deployToServer($repoUrl)) {
             $this->error('❌ Deployment failed');
             return self::FAILURE;
         }
+
+        // Copy built assets to server
+        $this->copyBuiltAssetsToServer();
 
         $this->info('✅ Deployment completed successfully!');
         $this->info("🌐 Your Laravel application: https://{$this->getSiteDir()}");
@@ -502,5 +508,104 @@ class DeploySharedCommand extends BaseHostingerCommand
         }
         
         return false;
+    }
+
+    /**
+     * Build frontend assets if package.json exists.
+     */
+    protected function buildFrontendAssets(): void
+    {
+        $packageJsonPath = base_path('package.json');
+        
+        if (!file_exists($packageJsonPath)) {
+            return;
+        }
+
+        $this->info('📦 Found package.json - building frontend assets...');
+
+        try {
+            // Check if npm is available
+            $npmCheck = \Illuminate\Support\Facades\Process::run('which npm');
+            if (!$npmCheck->successful()) {
+                $this->warn('⚠️  npm not found. Skipping asset build.');
+                return;
+            }
+
+            // Install dependencies if node_modules doesn't exist
+            if (!is_dir(base_path('node_modules'))) {
+                $this->info('📥 Installing npm dependencies...');
+                $installProcess = \Illuminate\Support\Facades\Process::path(base_path())
+                    ->timeout(300)
+                    ->run('npm install');
+                
+                if (!$installProcess->successful()) {
+                    $this->warn('⚠️  Failed to install npm dependencies: ' . $installProcess->errorOutput());
+                    return;
+                }
+            }
+
+            // Run build command
+            $this->info('🔨 Running npm run build...');
+            $buildProcess = \Illuminate\Support\Facades\Process::path(base_path())
+                ->timeout(300)
+                ->run('npm run build');
+            
+            if (!$buildProcess->successful()) {
+                $this->warn('⚠️  npm run build failed: ' . $buildProcess->errorOutput());
+                $this->warn('   Continuing deployment without built assets...');
+                return;
+            }
+
+            $this->info('✅ Frontend assets built successfully');
+        } catch (\Exception $e) {
+            $this->warn('⚠️  Error building frontend assets: ' . $e->getMessage());
+            $this->warn('   Continuing deployment without built assets...');
+        }
+    }
+
+    /**
+     * Copy built assets to remote server.
+     */
+    protected function copyBuiltAssetsToServer(): void
+    {
+        $buildPath = base_path('public/build');
+        
+        if (!is_dir($buildPath)) {
+            return;
+        }
+
+        $this->info('📤 Copying built assets to server...');
+
+        try {
+            $siteDir = $this->getSiteDir();
+            $absolutePath = $this->getAbsoluteSitePath($siteDir);
+            $remoteBuildPath = "{$absolutePath}/public/build";
+
+            // Build rsync command
+            $host = config('hostinger-deploy.ssh.host');
+            $username = config('hostinger-deploy.ssh.username');
+            $port = config('hostinger-deploy.ssh.port', 22);
+
+            // Use rsync to copy files
+            $rsyncCommand = sprintf(
+                'rsync -r -e "ssh -p %d -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null" %s/ %s@%s:%s',
+                $port,
+                escapeshellarg($buildPath),
+                $username,
+                $host,
+                escapeshellarg($remoteBuildPath)
+            );
+
+            $rsyncProcess = \Illuminate\Support\Facades\Process::timeout(60)->run($rsyncCommand);
+
+            if (!$rsyncProcess->successful()) {
+                $this->warn('⚠️  Failed to copy built assets: ' . $rsyncProcess->errorOutput());
+                return;
+            }
+
+            $this->info('✅ Built assets copied to server successfully');
+        } catch (\Exception $e) {
+            $this->warn('⚠️  Error copying built assets: ' . $e->getMessage());
+        }
     }
 }
