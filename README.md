@@ -18,17 +18,9 @@ composer require thecodeholic/laravel-hostinger-deploy --dev
 
 > **Note:** This package should be installed as a development dependency (`--dev`) since it's only needed during deployment, not in production.
 
-## Quick Start (All-in-One Command)
+## Required Environment Variables
 
-The easiest way to deploy and set up automated deployment:
-
-```bash
-php artisan hostinger:deploy-and-setup-cicd
-```
-
-### Required Environment Variables
-
-Add these to your `.env` file:
+Before using any deployment commands, add these to your `.env` file:
 
 ```env
 HOSTINGER_SSH_HOST=your-server-ip
@@ -36,6 +28,25 @@ HOSTINGER_SSH_USERNAME=your-username
 HOSTINGER_SSH_PORT=22
 HOSTINGER_SITE_DIR=your-website-folder
 GITHUB_API_TOKEN=your-github-token
+```
+
+### SSH Authentication Setup
+
+> **⚠️ Important:** It is **highly recommended** to set up SSH public key authentication on your Hostinger server instead of using password authentication. Public key authentication is more secure and eliminates the need to enter passwords during deployments.
+>
+> **To set up SSH public key authentication:**
+> 1. Generate an SSH key pair on your local machine: `ssh-keygen -t rsa -b 4096`
+> 2. Copy your public key to the server: `ssh-copy-id username@your-server-ip`
+> 3. Test the connection: `ssh username@your-server-ip` (should connect without password prompt)
+>
+> Once configured, the deployment commands will use your SSH key automatically, making deployments seamless and secure.
+
+## Quick Start (All-in-One Command)
+
+The easiest way to deploy and set up automated deployment:
+
+```bash
+php artisan hostinger:deploy-and-setup-cicd
 ```
 
 **What this command does:**
@@ -62,12 +73,6 @@ php artisan hostinger:deploy
 
 **What it does:** Deploys your Laravel application to Hostinger server (composer install, migrations, storage link, etc.)
 
-**Required Environment Variables:**
-- `HOSTINGER_SSH_HOST`
-- `HOSTINGER_SSH_USERNAME`
-- `HOSTINGER_SSH_PORT`
-- `HOSTINGER_SITE_DIR`
-
 **Command Options:**
 - `--fresh` - Delete existing files and clone fresh repository
 - `--site-dir=` - Override site directory from config
@@ -85,8 +90,6 @@ php artisan hostinger:publish-workflow
 
 **What it does:** Creates `.github/workflows/hostinger-deploy.yml` file locally
 
-**Required Environment Variables:** None (must be in a Git repository)
-
 **Command Options:**
 - `--branch=` - Branch to trigger deployment (default: auto-detect)
 - `--php-version=` - PHP version for workflow (default: 8.3)
@@ -100,13 +103,6 @@ php artisan hostinger:setup-cicd
 ```
 
 **What it does:** Publishes GitHub Actions workflow file locally and creates secrets automatically via GitHub API, and automatically adds deploy keys to your repository
-
-**Required Environment Variables:**
-- `HOSTINGER_SSH_HOST`
-- `HOSTINGER_SSH_USERNAME`
-- `HOSTINGER_SSH_PORT`
-- `HOSTINGER_SITE_DIR`
-- `GITHUB_API_TOKEN`
 
 **Command Options:**
 - `--token=` - GitHub Personal Access Token (overrides GITHUB_API_TOKEN from .env)
@@ -136,6 +132,9 @@ Your GitHub Personal Access Token needs the following permissions:
 - Laravel ^11.0|^12.0
 - SSH access to Hostinger server
 - Git repository (GitHub recommended)
+- **PHP `exec()` function must be enabled** (required for executing SSH commands and process management)
+
+> **Important:** This package requires the PHP `exec()` function to be available and enabled on your system. The `exec()` function is used for executing SSH commands and managing deployment processes. If `exec()` is disabled in your PHP configuration, deployment operations will fail.
 
 ## License
 

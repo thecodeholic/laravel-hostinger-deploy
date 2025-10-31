@@ -10,7 +10,8 @@ class DeploySharedCommand extends BaseHostingerCommand
     protected $signature = 'hostinger:deploy 
                             {--fresh : Delete and clone fresh repository}
                             {--site-dir= : Override site directory from config}
-                            {--token= : GitHub Personal Access Token}';
+                            {--token= : GitHub Personal Access Token}
+                            {--show-errors : Show detailed error messages}';
 
     /**
      * The console command description.
@@ -107,14 +108,42 @@ class DeploySharedCommand extends BaseHostingerCommand
                 return $this->handleGitAuthenticationError($repoUrl, $siteDir, 'clone_direct');
             }
             
-            // Show user-friendly error message instead of technical details
+            // Show error message
             $this->error("❌ Deployment failed.");
             $this->line('');
+            
+            // Show actual error details if show-errors flag is set or if error contains useful info
+            $showErrors = $this->option('show-errors');
+            $errorMessage = $e->getMessage();
+            
+            if ($showErrors || strpos($errorMessage, 'Error output:') !== false || strpos($errorMessage, 'exit code:') !== false) {
+                $this->warn('📋 Error Details:');
+                $this->line('');
+                // Display the error message, breaking it into lines if it contains newlines
+                $errorLines = explode("\n", $errorMessage);
+                foreach ($errorLines as $line) {
+                    // Highlight exit codes and error outputs
+                    if (strpos($line, 'exit code:') !== false || strpos($line, 'Error output:') !== false) {
+                        $this->line('   ⚠️  ' . $line);
+                    } else {
+                        $this->line('   ' . $line);
+                    }
+                }
+                $this->line('');
+            }
+            
             $this->warn('💡 This might be due to:');
             $this->line('   1. Server connection issues');
             $this->line('   2. Repository access problems');
             $this->line('   3. Missing dependencies on the server');
+            $this->line('   4. Command execution failures (composer, git, etc.)');
             $this->line('');
+            
+            if (!$showErrors) {
+                $this->info('💡 Tip: Run with --show-errors flag to see detailed error messages.');
+                $this->line('');
+            }
+            
             $this->info('🔧 Please check your server configuration and try again.');
             return false;
         }
@@ -287,6 +316,17 @@ class DeploySharedCommand extends BaseHostingerCommand
 
         // Remove public_html if exists
         $commands[] = "rm -rf public_html";
+
+        // Add Git host to known_hosts to avoid interactive prompt on first clone
+        // This is safe and necessary for automated deployments
+        $gitHost = $this->extractGitHost($repoUrl);
+        if ($gitHost) {
+            $commands[] = "mkdir -p ~/.ssh";
+            $commands[] = "chmod 700 ~/.ssh";
+            // Escape hostname for security
+            $escapedHost = escapeshellarg($gitHost);
+            $commands[] = "ssh-keyscan -H {$escapedHost} >> ~/.ssh/known_hosts 2>/dev/null || true";
+        }
 
         switch ($cloneChoice) {
             case 'clone_direct':
@@ -485,29 +525,95 @@ class DeploySharedCommand extends BaseHostingerCommand
     {
         $this->line('');
         
+        $showErrors = $this->option('show-errors');
+        $errorMessage = $e->getMessage();
+        
         if ($maxRetriesReached) {
             $this->error('❌ Maximum retry attempts reached.');
             $this->line('');
+            
+            // Show actual error details if show-errors flag is set or if error contains useful info
+            if ($showErrors || strpos($errorMessage, 'Error output:') !== false || strpos($errorMessage, 'exit code:') !== false) {
+                $this->warn('📋 Error Details:');
+                $this->line('');
+                $errorLines = explode("\n", $errorMessage);
+                foreach ($errorLines as $line) {
+                    if (strpos($line, 'exit code:') !== false || strpos($line, 'Error output:') !== false) {
+                        $this->line('   ⚠️  ' . $line);
+                    } else {
+                        $this->line('   ' . $line);
+                    }
+                }
+                $this->line('');
+            }
+            
             $this->warn('💡 Please check:');
             $this->line('   1. The deploy key has been added correctly to GitHub');
             $this->line('   2. The repository URL is correct: ' . $repoUrl);
             $this->line('   3. You have access to the repository');
             $this->line('   4. The deploy key has write access (if needed)');
             $this->line('');
+            
+            if (!$showErrors) {
+                $this->info('💡 Tip: Run with --show-errors flag to see detailed error messages.');
+                $this->line('');
+            }
+            
             $this->info('🔧 You can try running the command again after fixing the issue.');
         } else {
             // Not an authentication error - show general deployment failure
             $this->error('❌ Deployment failed.');
             $this->line('');
+            
+            // Show actual error details if show-errors flag is set or if error contains useful info
+            if ($showErrors || strpos($errorMessage, 'Error output:') !== false || strpos($errorMessage, 'exit code:') !== false) {
+                $this->warn('📋 Error Details:');
+                $this->line('');
+                $errorLines = explode("\n", $errorMessage);
+                foreach ($errorLines as $line) {
+                    if (strpos($line, 'exit code:') !== false || strpos($line, 'Error output:') !== false) {
+                        $this->line('   ⚠️  ' . $line);
+                    } else {
+                        $this->line('   ' . $line);
+                    }
+                }
+                $this->line('');
+            }
+            
             $this->warn('💡 This might be due to:');
             $this->line('   1. Server connection issues');
             $this->line('   2. Repository access problems');
             $this->line('   3. Missing dependencies on the server');
+            $this->line('   4. Command execution failures (composer, git, etc.)');
             $this->line('');
+            
+            if (!$showErrors) {
+                $this->info('💡 Tip: Run with --show-errors flag to see detailed error messages.');
+                $this->line('');
+            }
+            
             $this->info('🔧 Please check your server configuration and try again.');
         }
         
         return false;
+    }
+
+    /**
+     * Extract Git hostname from repository URL.
+     */
+    protected function extractGitHost(string $repoUrl): ?string
+    {
+        // Handle SSH URLs: git@github.com:owner/repo.git or git@gitlab.com:owner/repo.git
+        if (preg_match('/git@([^:]+):/', $repoUrl, $matches)) {
+            return $matches[1];
+        }
+        
+        // Handle HTTPS URLs: https://github.com/owner/repo.git or https://gitlab.com/owner/repo.git
+        if (preg_match('/https?:\/\/([^\/]+)/', $repoUrl, $matches)) {
+            return $matches[1];
+        }
+        
+        return null;
     }
 
     /**

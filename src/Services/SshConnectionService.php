@@ -32,12 +32,39 @@ class SshConnectionService
                 ->run($sshCommand);
             
             if (!$result->successful()) {
-                throw new ProcessFailedException($result);
+                // Build detailed error message with error output and exit code
+                $errorOutput = $result->errorOutput();
+                $exitCode = $result->exitCode();
+                $output = $result->output();
+                
+                $errorMessage = "SSH command failed";
+                if ($exitCode !== null) {
+                    $errorMessage .= " (exit code: {$exitCode})";
+                }
+                $errorMessage .= ": Command exited with non-zero status";
+                
+                // Include error output if available
+                if (!empty(trim($errorOutput))) {
+                    $errorMessage .= "\nError output: " . trim($errorOutput);
+                }
+                
+                // Include regular output if it contains useful info and is different from error output
+                if (!empty(trim($output)) && trim($errorOutput) !== trim($output)) {
+                    $errorMessage .= "\nOutput: " . trim($output);
+                }
+                
+                throw new \Exception($errorMessage);
             }
             
             return $result->output();
-        } catch (ProcessFailedException $e) {
-            throw new \Exception("SSH command failed: " . $e->getMessage());
+        } catch (\Exception $e) {
+            // If it's already our formatted exception, re-throw it
+            if (strpos($e->getMessage(), 'SSH command failed') === 0) {
+                throw $e;
+            }
+            
+            // For other exceptions (like ProcessFailedException), preserve the message
+            throw new \Exception("SSH command failed: " . $e->getMessage(), 0, $e);
         }
     }
 
