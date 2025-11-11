@@ -65,6 +65,29 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '{{PHP_VERSION}}'
+          extensions: mbstring, xml, bcmath, pdo_mysql, pdo_sqlite, gd, zip
+          coverage: none
+
+      - name: Copy .env
+        run: |
+          if [ -f .env.example ]; then
+            cp .env.example .env
+          else
+            echo "⚠️ .env.example not found, creating minimal .env"
+            echo "APP_ENV=testing" > .env
+            echo "APP_KEY=" >> .env
+          fi
+
+      - name: Install Composer Dependencies
+        run: composer install --prefer-dist --no-interaction --no-progress
+
+      - name: Generate Application Key
+        run: php artisan key:generate --ansi
+
       - name: Check for package.json
         id: check_package
         run: |
@@ -102,10 +125,19 @@ jobs:
             echo "⚠️ No build script found in package.json"
           fi
 
+      - name: Upload Built Assets
+        if: steps.check_package.outputs.exists == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-assets
+          path: public/build/
+          if-no-files-found: ignore
+          retention-days: 1
+
   deploy:
     name: Deploy to Hostinger
     runs-on: ubuntu-latest
-    needs: [tests]
+    needs: [tests, build-assets]
     if: success() || failure() # Deploy even if tests fail (you can change to 'success()' to require passing tests)
     
     steps:
@@ -117,6 +149,13 @@ jobs:
         with:
           php-version: '{{PHP_VERSION}}'
           extensions: mbstring, xml, bcmath, pdo_mysql
+
+      - name: Download Built Assets
+        uses: actions/download-artifact@v4
+        with:
+          name: build-assets
+          path: public/build/
+        continue-on-error: true
 
       - name: Setup Node.js (for asset building)
         if: hashFiles('package.json') != ''
@@ -179,7 +218,7 @@ jobs:
             # Ensure we're on the correct branch
             git fetch origin
             git checkout {{BRANCH}}
-            git pull origin {{BRANCH}}
+            git reset --hard origin/{{BRANCH}}
             
             echo "📦 Installing Composer dependencies..."
             composer install --no-dev --optimize-autoloader --no-interaction --prefer-dist

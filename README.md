@@ -7,7 +7,7 @@ Deploy your Laravel application to Hostinger shared hosting with automated GitHu
 Install the package via Composer:
 
 ```bash
-composer require thecodeholic/laravel-hostinger-deploy:^0.3 --dev
+composer require thecodeholic/laravel-hostinger-deploy:^0.4 --dev
 ```
 
 Or install the latest version:

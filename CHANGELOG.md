@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] - 2025-11-11
+
+### Added
+- Full Laravel environment setup in `build-assets` job to support Laravel Vite plugins
+- PHP, Composer, and .env configuration in the build-assets job
+- Artifact upload/download mechanism to share built assets between GitHub Actions jobs
+- `build-assets` job now properly generates `vendor/autoload.php` before building frontend assets
+
+### Fixed
+- Fixed build failure when Laravel Vite plugins require PHP artisan commands during asset compilation
+- Fixed missing Composer dependencies causing "vendor/autoload.php not found" error during npm build
+- Fixed artifact sharing issue where built assets from `build-assets` job were not available in `deploy` job
+
+### Improved
+- GitHub Actions workflow now properly isolates and shares build artifacts between jobs
+- Better dependency management between jobs (deploy now depends on both tests and build-assets)
+
 ## [0.3.0] - 2025-01-XX
 
 ### Added
