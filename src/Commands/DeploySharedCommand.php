@@ -351,21 +351,24 @@ class DeploySharedCommand extends BaseHostingerCommand
         $composerFlags = config('hostinger-deploy.deployment.composer_flags', '--no-dev --optimize-autoloader');
         $commands[] = "composer install {$composerFlags}";
 
-        // Copy .env.example to .env
-        $commands[] = "if [ -f .env.example ]; then cp .env.example .env; fi";
+        // Copy .env.example to .env ONLY if .env doesn't exist
+        $commands[] = "if [ -f .env.example ] && [ ! -f .env ]; then cp .env.example .env; fi";
 
-        // Create symbolic link for Laravel public folder
-        $commands[] = "if [ -d public ]; then ln -s public public_html; fi";
+        // Create symbolic link for Laravel public folder (only if it doesn't exist)
+        $commands[] = "if [ -d public ] && [ ! -L public_html ] && [ ! -d public_html ]; then ln -s public public_html; fi";
 
-        // Laravel setup
-        $commands[] = "php artisan key:generate --quiet";
+        // Generate app key ONLY if APP_KEY is not set in .env
+        // Check if .env exists AND if APP_KEY line exists and is not empty
+        $commands[] = "if [ -f .env ] && ! grep -q '^APP_KEY=base64:' .env 2>/dev/null && ! grep -q '^APP_KEY=\"base64:' .env 2>/dev/null; then php artisan key:generate --quiet; fi";
 
+        // Run migrations only if .env exists (app is configured)
         if (config('hostinger-deploy.deployment.run_migrations', true)) {
-            $commands[] = "echo 'yes' | php artisan migrate --quiet";
+            $commands[] = "if [ -f .env ]; then echo 'yes' | php artisan migrate --quiet; fi";
         }
 
+        // Create storage link only if it doesn't exist
         if (config('hostinger-deploy.deployment.run_storage_link', true)) {
-            $commands[] = "php artisan storage:link --quiet";
+            $commands[] = "if [ -d public ] && [ ! -L public/storage ] && [ ! -d public/storage ]; then php artisan storage:link --quiet; fi";
         }
 
         return $commands;

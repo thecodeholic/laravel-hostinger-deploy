@@ -5,6 +5,26 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.0] - 2025-01-XX
+
+### Fixed
+- Fixed `.env` file being overwritten during incremental deployments
+- Fixed app key regeneration breaking user sessions on subsequent deployments
+- Fixed storage symlink creation errors when symlink already exists
+- Fixed `public_html` symlink creation errors when symlink already exists
+
+### Improved
+- Post-deployment commands now run conditionally based on existing state
+- `.env` file is only created from `.env.example` if it doesn't already exist
+- App key generation only runs if `APP_KEY` is not set in `.env`
+- Storage symlink creation only runs if symlink doesn't exist
+- Safe for incremental deployments - preserves user data and configuration files
+- Migrations now check for `.env` existence before running
+
+### Changed
+- Deployment commands are now idempotent - safe to run multiple times without side effects
+- First-time deployment behavior unchanged, but subsequent deployments preserve existing configuration
+
 ## [0.4.0] - 2025-11-11
 
 ### Added
