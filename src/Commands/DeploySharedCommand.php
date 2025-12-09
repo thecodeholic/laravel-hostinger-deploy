@@ -358,18 +358,56 @@ class DeploySharedCommand extends BaseHostingerCommand
         $commands[] = "if [ -d public ] && [ ! -L public_html ] && [ ! -d public_html ]; then ln -s public public_html; fi";
 
         // Generate app key ONLY if APP_KEY is not set in .env
-        // Check if .env exists AND if APP_KEY line exists and is not empty
-        $commands[] = "if [ -f .env ] && ! grep -q '^APP_KEY=base64:' .env 2>/dev/null && ! grep -q '^APP_KEY=\"base64:' .env 2>/dev/null; then php artisan key:generate --quiet; fi";
+        $commands[] = "if ! grep -q '^APP_KEY=base64:' .env 2>/dev/null && ! grep -q '^APP_KEY=\"base64:' .env 2>/dev/null; then php artisan key:generate --quiet; fi";
 
-        // Run migrations only if .env exists (app is configured)
+        // Run migrations
         if (config('hostinger-deploy.deployment.run_migrations', true)) {
-            $commands[] = "if [ -f .env ]; then echo 'yes' | php artisan migrate --quiet; fi";
+            $commands[] = "echo 'yes' | php artisan migrate --quiet";
         }
 
         // Create storage link only if it doesn't exist
         if (config('hostinger-deploy.deployment.run_storage_link', true)) {
             $commands[] = "if [ -d public ] && [ ! -L public/storage ] && [ ! -d public/storage ]; then php artisan storage:link --quiet; fi";
         }
+
+        // Post-deployment optimization commands
+        // Clear and cache configuration
+        if (config('hostinger-deploy.deployment.run_config_cache', false)) {
+            $commands[] = "php artisan config:clear --quiet";
+            $commands[] = "php artisan config:cache --quiet";
+        }
+
+        // Clear and cache routes
+        if (config('hostinger-deploy.deployment.run_route_cache', false)) {
+            $commands[] = "php artisan route:clear --quiet";
+            $commands[] = "php artisan route:cache --quiet";
+        }
+
+        // Clear and cache views
+        if (config('hostinger-deploy.deployment.run_view_cache', false)) {
+            $commands[] = "php artisan view:clear --quiet";
+            $commands[] = "php artisan view:cache --quiet";
+        }
+
+        // Optimize application (always run)
+        $commands[] = "php artisan optimize:clear --quiet";
+        $commands[] = "php artisan optimize --quiet";
+
+        // Clear and cache events (if available)
+        $commands[] = "php artisan event:clear --quiet || true";
+        $commands[] = "php artisan event:cache --quiet || true";
+
+        // Restart queue workers (if using queues)
+        $commands[] = "php artisan queue:restart --quiet || true";
+
+        // Restart Horizon (if using Laravel Horizon)
+        $commands[] = "php artisan horizon:terminate --quiet || true";
+
+        // Clear application cache
+        $commands[] = "php artisan cache:clear --quiet";
+
+        // Clear OPcache (if available)
+        $commands[] = "php artisan opcache:clear --quiet || true";
 
         return $commands;
     }

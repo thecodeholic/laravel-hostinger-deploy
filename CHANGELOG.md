@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.5.0] - 2025-01-XX
 
+### Added
+- Post-deployment optimization commands matching GitHub Actions workflow:
+  - Application optimization (`optimize:clear` and `optimize`)
+  - Event caching (`event:clear` and `event:cache`)
+  - Queue worker restart (`queue:restart`)
+  - Horizon termination (`horizon:terminate`)
+  - Application cache clearing (`cache:clear`)
+  - OPcache clearing (`opcache:clear`)
+- Configurable caching commands (config, route, view) via config file flags
+
 ### Fixed
 - Fixed `.env` file being overwritten during incremental deployments
 - Fixed app key regeneration breaking user sessions on subsequent deployments
@@ -19,7 +29,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - App key generation only runs if `APP_KEY` is not set in `.env`
 - Storage symlink creation only runs if symlink doesn't exist
 - Safe for incremental deployments - preserves user data and configuration files
-- Migrations now check for `.env` existence before running
+- Removed redundant `.env` file existence checks (file is guaranteed to exist at post-deployment stage)
+- `hostinger:deploy` command now matches GitHub Actions workflow post-deployment behavior
 
 ### Changed
 - Deployment commands are now idempotent - safe to run multiple times without side effects
